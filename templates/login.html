@@ -1,0 +1,246 @@
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход · ImageAnnotate Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+
+        .hero-bg {
+            background-image: radial-gradient(circle at 90% 10%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+                              radial-gradient(circle at 10% 90%, rgba(139, 92, 246, 0.08) 0%, transparent 50%);
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        .input-focus-ring {
+            transition: all 0.2s ease;
+        }
+        .input-focus-ring:focus-within {
+            box-shadow: 0 0 0 4px rgba(59,130,246,0.15);
+            border-color: #3b82f6;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -8px rgba(59,130,246,0.4);
+        }
+        .btn-primary:active { transform: translateY(0px); }
+
+        .btn-outline {
+            border: 1px solid #e2e8f0;
+            background: white;
+            transition: background 0.2s, transform 0.15s;
+        }
+        .btn-outline:hover {
+            background: #f8fafc;
+            transform: scale(1.02);
+            border-color: #cbd5e1;
+        }
+
+        .animate-float {
+            animation: float 5s ease-in-out infinite;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-14px) rotate(1deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
+        .animate-pulse-slow {
+            animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse { 50% { opacity: 0.7; } }
+
+        .wave-bg {
+            background: linear-gradient(145deg, #ffffff 40%, #f9fafc 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0,0,0,0.02);
+        }
+        .grid-dots {
+            background-image: radial-gradient(#d1d5db 1.5px, transparent 1.5px);
+            background-size: 30px 30px;
+        }
+        .nav-blur {
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-800 antialiased overflow-x-hidden">
+
+    <!-- навигация (адаптирована под страницу входа) -->
+    <nav class="sticky top-0 z-50 w-full border-b border-gray-200/60 bg-white/70 nav-blur">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2" onclick="window.location.href='/'">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                        <i data-lucide="box-select" class="text-white w-4 h-4"></i>
+                    </div>
+                    <span class="text-xl font-bold text-gray-900">ImageAnnotate<span class="text-blue-600">.pro</span></span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition">Возможности</a>
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition">Цены</a>
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition">Блог</a>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <!-- на странице входа кнопка "Войти" выделена, "Регистрация" обычная -->
+                    <button  class="hidden md:inline-block px-5 py-2.5 rounded-lg btn-primary text-white font-medium shadow-md text-sm sm:text-base " onclick="window.location.href='/register'">Регистрация</button>
+
+                    <button id="mobile-menu-button" class="md:hidden p-2 rounded-md text-gray-700">
+                        <i data-lucide="menu"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="mobile-menu" class="md:hidden hidden bg-white/95 backdrop-blur-md border-b px-4 py-3 space-y-2">
+            <a href="#" class="block py-2 text-gray-600">Возможности</a>
+            <a href="#" class="block py-2 text-gray-600">Цены</a>
+            <a href="#" class="block py-2 text-gray-600">Блог</a>
+            <a href="#" class="block py-2 text-gray-600 font-medium">Войти</a>
+            <a href="#" class="block py-2 text-gray-600">Регистрация</a>
+        </div>
+    </nav>
+
+    <!-- Основная секция входа -->
+    <section class="hero-bg grid-dots min-h-[calc(100vh-64px)] flex items-center py-10 lg:py-16 relative overflow-hidden">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="max-w-6xl mx-auto flex flex-col items-center gap-12 lg:gap-16">
+                <!-- колонка с формой входа -->
+                <div class="lg:w-1/2 w-full max-w-md mx-auto lg:mx-0">
+                    <div class="glass-effect card-shadow rounded-3xl p-8 border border-white/70 transition-all duration-300 hover:shadow-2xl">
+                        <div class="mb-6">
+                            <h2 class="text-2xl font-bold text-gray-900">Добро пожаловать!</h2>
+                            <p class="text-gray-500 text-sm mt-1">Войдите, чтобы продолжить работу</p>
+                        </div>
+
+                        <!-- форма входа -->
+                        <form class="space-y-5" id="loginForm" action="{{ url_for('login') }}" method="POST">
+                            <!-- email / логин -->
+                            <div class="input-focus-ring rounded-xl border border-gray-200 bg-white/70 flex items-center px-3 py-2 transition">
+                                <i data-lucide="mail" class="text-gray-400 w-5 h-5 mr-2"></i>
+                                <input type="email" name="email" placeholder="Электронная почта" class="w-full bg-transparent outline-none text-gray-800 placeholder-gray-400" id="email" required>
+                            </div>
+                            <!-- пароль -->
+                            <div class="input-focus-ring rounded-xl border border-gray-200 bg-white/70 flex items-center px-3 py-2 transition">
+                                <i data-lucide="lock" class="text-gray-400 w-5 h-5 mr-2"></i>
+                                <input type="password" name="password" placeholder="Пароль" class="w-full bg-transparent outline-none text-gray-800" id="password" required>
+                            </div>
+
+                            <!-- дополнительная строка: запомнить меня + забыли пароль -->
+                            <div class="flex items-center justify-between">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox"  name="remember" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked id="remember">
+                                    <span class="text-sm text-gray-600 group-hover:text-gray-800 transition">Запомнить меня</span>
+                                </label>
+                                <a href="#" class="text-sm text-blue-600 font-medium hover:underline">Забыли пароль?</a>
+                            </div>
+
+                            <!-- кнопка входа -->
+                            <button type="submit" class="btn-primary w-full py-3.5 rounded-xl text-white font-semibold text-lg shadow-lg flex items-center justify-center gap-2" id="loginBtn">
+                                <span>Войти</span>
+                                <i data-lucide="log-in" class="w-5 h-5"></i>
+                            </button>
+
+                            <!-- разделитель OAuth -->
+                            <div class="relative my-6">
+                                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+                                <div class="relative flex justify-center"><span class="bg-white/70 px-3 text-sm text-gray-400">или войти через</span></div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <button type="button" class="btn-outline flex items-center justify-center gap-2 py-3 rounded-xl text-gray-700 font-medium transition" >
+                                    <i data-lucide="github" class="w-5 h-5"></i> GitHub
+                                </button>
+                                <button type="button" class="btn-outline flex items-center justify-center gap-2 py-3 rounded-xl text-gray-700 font-medium transition">
+                                    <i data-lucide="mail" class="w-5 h-5"></i> Google
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- ссылка на регистрацию -->
+                        <p class="text-center mt-8 text-gray-600 text-sm">
+                            Нет аккаунта?
+                            <a href="#" class="text-blue-600 font-semibold hover:underline transition-all hover:translate-x-0.5 inline-block">Зарегистрироваться →</a>
+                        </p>
+
+                        <!-- живая статистика (оставлена как элемент оживления) -->
+                        <div class="mt-6 flex items-center justify-center text-xs text-gray-400 border-t pt-5 border-gray-200/50">
+                            <div class="flex items-center gap-2">
+                                <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
+                                <span id="liveCounter">18</span> разметчиков онлайн
+                                <span class="mx-2">•</span>
+                                <span id="currentTime"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- декоративный переход -->
+    <div class="h-12 bg-gradient-to-t from-gray-50 to-transparent -mt-12 relative z-0"></div>
+
+    <!-- footer -->
+    <footer class="bg-white border-t border-gray-100 py-8 text-sm text-gray-500">
+        <div class="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
+            <div>© 2025 ImageAnnotate.pro — разметка для команд</div>
+            <div class="flex gap-6 mt-3 md:mt-0">
+                <a href="#" class="hover:text-gray-800 transition">Конфиденциальность</a>
+                <a href="#" class="hover:text-gray-800 transition">Правила</a>
+                <a href="#" class="hover:text-gray-800 transition">Поддержка</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+
+        // мобильное меню
+        const menuBtn = document.getElementById('mobile-menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+        if (menuBtn) {
+            menuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+                const icon = menuBtn.querySelector('i');
+                if (mobileMenu.classList.contains('hidden')) {
+                    icon.setAttribute('data-lucide', 'menu');
+                } else {
+                    icon.setAttribute('data-lucide', 'x');
+                }
+                lucide.createIcons();
+            });
+        }
+
+        // динамическое время
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second:'2-digit' });
+            document.getElementById('currentTime') && (document.getElementById('currentTime').innerText = timeStr);
+        }
+        setInterval(updateTime, 1000);
+
+        // имитация живого счетчика онлайн
+        let counter = 18;
+        setInterval(() => {
+            const delta = Math.floor(Math.random() * 5) - 2; // -2..2
+            counter = Math.max(12, Math.min(34, counter + delta));
+            const el = document.getElementById('liveCounter');
+            if (el) el.innerText = counter;
+        }, 4000);
+
+
+    </script>
+</body>

@@ -1,0 +1,514 @@
+
+
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Annotate Pro | Командная разметка изображений</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .hero-bg {
+            background-image: radial-gradient(circle at 90% 10%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                              radial-gradient(circle at 10% 90%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3)!important;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+            color: #1f2937;
+        }
+        
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+        }
+        
+        .animate-float-delay {
+            animation: float 6s ease-in-out infinite;
+            animation-delay: 1s;
+        }
+        
+        .step-number {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 20px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            margin-bottom: 1rem;
+        }
+        
+        .nav-blur {
+            backdrop-filter: blur(10px);
+        }
+
+      
+
+h1 {
+    font-size: 16px;
+    margin-top: 0;
+}
+
+p {
+    color: rgb(107, 114, 128);
+    font-size: 15px;
+    margin-bottom: 10px;
+    margin-top: 5px;
+}
+
+.card {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 16px;
+    border: 1px solid lightgray;
+    border-radius: 16px;
+}
+
+.card p:last-child {
+    margin-bottom: 0;
+}
+
+    </style>
+</head>
+<body class="bg-white text-gray-800">
+
+    <!-- Навигационная панель -->
+    <nav class="sticky top-0 z-50 w-full border-b border-gray-100 bg-white/90 nav-blur">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Логотип -->
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                        <i data-lucide="box-select" class="text-white"></i>
+                    </div>
+                    <span class="text-xl font-bold text-gray-900">ImageAnnotate<span class="text-blue-600">.pro</span></span>
+                </div>
+
+                <!-- Навигационные ссылки для десктопа -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition-colors duration-300">Возможности</a>
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition-colors duration-300">Цены</a>
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition-colors duration-300">Документация</a>
+                    <a href="#" class="text-gray-600 hover:text-gray-900 transition-colors duration-300">О нас</a>
+                </div>
+
+                <!-- Кнопки авторизации -->
+                <div class="flex items-center space-x-4">
+                    <button class="hidden md:inline-block px-4 py-2 text-gray-700 font-medium hover:text-gray-900 transition-colors duration-300" onclick="window.location.href='/login'">
+                        Войти
+                    </button>
+                    <button  class="px-5 py-2.5 rounded-lg btn-primary text-white font-medium shadow-sm" onclick="window.location.href='/register'">
+                        Регистрация
+                    </button>
+
+                    <!-- Мобильное меню -->
+                    <button id="mobile-menu-button" class="md:hidden p-2 rounded-md text-gray-700">
+                        <i data-lucide="menu"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Мобильное меню -->
+        <div id="mobile-menu" class="md:hidden hidden bg-white border-b">
+            <div class="px-4 py-3 space-y-3">
+                <a href="#" class="block py-2 text-gray-600 hover:text-gray-900">Возможности</a>
+                <a href="#" class="block py-2 text-gray-600 hover:text-gray-900">Цены</a>
+                <a href="#" class="block py-2 text-gray-600 hover:text-gray-900">Документация</a>
+                <a href="#" class="block py-2 text-gray-600 hover:text-gray-900">О нас</a>
+                <a href="#" class="block py-2 text-gray-600 hover:text-gray-900">Войти</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Главный экран -->
+    <section class="hero-bg overflow-hidden">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
+            <div class="flex flex-col lg:flex-row items-center">
+                <div class="lg:w-1/2 mb-12 lg:mb-0">
+                    <div class="inline-block px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-sm font-medium mb-6">
+                        Командная платформа для разметки изображений
+                    </div>
+                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+                        Современная разметка изображений для команд
+                    </h1>
+                    <p class="text-lg md:text-xl text-gray-600 mb-10 max-w-2xl">
+                        Профессиональная платформа для командной разметки изображений с AI-помощником, контролем качества и удобным распределением задач между пользователями.
+                    </p>
+                    <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-6">
+                        <button class="px-8 py-4 rounded-xl btn-primary text-white font-semibold text-lg shadow-lg">
+                            Начать работу бесплатно
+                        </button>
+                        <button class="px-8 py-4 rounded-xl btn-secondary text-gray-800 font-semibold text-lg">
+                            <div class="flex items-center justify-center">
+                                <i data-lucide="play-circle" class="mr-2"></i>
+                                Смотреть демо
+                            </div>
+                        </button>
+                    </div>
+                    <div class="mt-10 text-gray-500 text-sm">
+                        <span class="flex items-center">
+                            <i data-lucide="check-circle" class="mr-2 text-green-500"></i>
+                            Бесплатно для команд до 5 человек • Без привязки карты
+                        </span>
+                    </div>
+                </div>
+                <div class="lg:w-1/2 relative">
+                    <div class="relative">
+                        <!-- Анимированные элементы фона -->
+                        <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-float"></div>
+                        <div class="absolute top-1/3 right-1/4 w-56 h-56 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-float-delay"></div>
+
+                        <!-- Основное изображение интерфейса -->
+                        <div class="relative bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100">
+                            <div class="bg-gradient-to-r from-gray-50 to-white p-6 border-b border-gray-100">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-2">
+                                        
+                                    </div>
+                                    <div class="flex space-x-2">
+                                        <div class="w-6 h-6 rounded-full bg-green-100"></div>
+                                        <div class="w-6 h-6 rounded-full bg-yellow-100"></div>
+                                        <div class="w-6 h-6 rounded-full bg-red-100"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-6">
+                                <div class="grid grid-cols-3 gap-4 mb-6">
+                                    <div class="col-span-2 h-48 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 border border-gray-200 overflow-hidden relative">
+                                        <!-- Изображение с примерами разметки -->
+                                        <div class="absolute inset-0 flex items-center justify-center">
+                                            <div class="relative w-full h-full">
+                                                <!-- Фоновое изображение -->
+                                                <div class="absolute inset-0 bg-gray-200 flex items-center justify-center">
+                                                    <div class="text-gray-400 text-sm">Изображение: Городской пейзаж</div>
+                                                </div>
+                                                <!-- Примеры разметки -->
+                                                <div class="absolute top-4 left-4 w-20 h-10 border-2 border-green-500 rounded-md flex items-center justify-center">
+                                                    <span class="text-xs font-bold text-green-600 bg-white px-1">Машина</span>
+                                                </div>
+                                                <div class="absolute top-12 right-8 w-16 h-16 border-2 border-blue-500 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-bold text-blue-600 bg-white px-1">Светофор</span>
+                                                </div>
+                                                <div class="absolute bottom-8 left-12 w-24 h-8 border-2 border-red-500 rounded-md flex items-center justify-center">
+                                                    <span class="text-xs font-bold text-red-600 bg-white px-1">Пешеход</span>
+                                                </div>
+                                                <div class="absolute bottom-4 right-4 w-12 h-12 border-2 border-purple-500 rounded-md flex items-center justify-center">
+                                                    <span class="text-xs font-bold text-purple-600 bg-white px-1">Знак</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="absolute bottom-2 left-2 bg-white/80 backdrop-blur-sm px-2 py-1 rounded text-xs text-gray-700">
+                                            <div class="flex items-center">
+                                                <div class="w-2 h-2 rounded-full bg-green-500 mr-1"></div>
+                                                4 объекта размечено
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <div class="h-20 rounded-lg bg-gray-50 border border-gray-200 p-3">
+                                            <div class="text-xs text-gray-500 mb-1">Статистика</div>
+                                            <div class="text-sm font-medium text-gray-800">87% точности</div>
+                                            <div class="text-xs text-gray-600">Проверено: 3/4 объектов</div>
+                                        </div>
+                                        <div class="h-20 rounded-lg bg-gray-50 border border-gray-200 p-3">
+                                            <div class="text-xs text-gray-500 mb-1">Активный инструмент</div>
+                                            <div class="flex items-center">
+                                                <div class="w-4 h-4 border-2 border-blue-500 mr-2"></div>
+                                                <div class="text-sm font-medium text-gray-800">Bounding Box</div>
+                                            </div>
+                                            <div class="text-xs text-gray-600 mt-1">Нажмите для изменения</div>
+                                        </div>
+                                    </div>
+                                </div>
+                               
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Преимущества -->
+    <section class="py-16 md:py-24 bg-gray-50">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                    Почему выбирают ImageAnnotate.pro
+                </h2>
+                <p class="text-lg text-gray-600">
+                    Все инструменты для эффективной командной работы над разметкой изображений
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Карточка 1 -->
+                <div class="bg-white rounded-2xl p-8 card-hover shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center mb-6">
+                        <i data-lucide="users" class="text-blue-600 w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Командная работа</h3>
+                    <p class="text-gray-600">
+                        Распределяйте задачи между членами команды, отслеживайте прогресс и управляйте проектами совместно.
+                    </p>
+                </div>
+
+                <!-- Карточка 2 -->
+                <div class="bg-white rounded-2xl p-8 card-hover shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-green-100 to-green-50 flex items-center justify-center mb-6">
+                        <i data-lucide="check-circle" class="text-green-600 w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Контроль качества</h3>
+                    <p class="text-gray-600">
+                        Встроенная система проверки качества разметки с ревью от экспертов и автоматической валидацией.
+                    </p>
+                </div>
+
+                <!-- Карточка 3 -->
+                <div class="bg-white rounded-2xl p-8 card-hover shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-100 to-purple-50 flex items-center justify-center mb-6">
+                        <i data-lucide="zap" class="text-purple-600 w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">AI-помощник</h3>
+                    <p class="text-gray-600">
+                        Искусственный интеллект помогает с автоматической разметкой, ускоряя работу в 3 раза.
+                    </p>
+                </div>
+
+                <!-- Карточка 4 -->
+                <div class="bg-white rounded-2xl p-8 card-hover shadow-lg border border-gray-100">
+                    <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center mb-6">
+                        <i data-lucide="bar-chart" class="text-orange-600 w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">Аналитика и отчёты</h3>
+                    <p class="text-gray-600">
+                        Детальная аналитика по каждому проекту, скорости разметки и точности результатов.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Как это работает -->
+    <section class="py-16 md:py-24 bg-white">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                    Как это работает
+                </h2>
+                <p class="text-lg text-gray-600">
+                    Простой и понятный процесс работы с платформой
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Шаг 1 -->
+                <div class="relative">
+                    <div class="step-number mx-auto">1</div>
+                    <div class="text-center">
+                        <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                            <i data-lucide="upload-cloud" class="text-blue-600 w-10 h-10"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-3">Загрузка изображений</h3>
+                        <p class="text-gray-600">
+                            Загрузите свои изображения или подключите облачное хранилище. Поддержка всех популярных форматов.
+                        </p>
+                    </div>
+                    <div class="hidden lg:block absolute top-12 right-0 w-full h-0.5 bg-gradient-to-r from-blue-100 to-transparent"></div>
+                </div>
+
+                <!-- Шаг 2 -->
+                <div class="relative">
+                    <div class="step-number mx-auto">2</div>
+                    <div class="text-center">
+                        <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center">
+                            <i data-lucide="users" class="text-green-600 w-10 h-10"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-3">Распределение задач</h3>
+                        <p class="text-gray-600">
+                            Назначьте задачи членам команды или используйте автоматическое распределение по специализации.
+                        </p>
+                    </div>
+                    <div class="hidden lg:block absolute top-12 right-0 w-full h-0.5 bg-gradient-to-r from-green-100 to-transparent"></div>
+                </div>
+
+                <!-- Шаг 3 -->
+                <div class="relative">
+                    <div class="step-number mx-auto">3</div>
+                    <div class="text-center">
+                        <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center">
+                            <i data-lucide="box-select" class="text-purple-600 w-10 h-10"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-3">Разметка объектов</h3>
+                        <p class="text-gray-600">
+                            Используйте продвинутые инструменты разметки: bounding boxes, полигоны, семантическую сегментацию.
+                        </p>
+                    </div>
+                    <div class="hidden lg:block absolute top-12 right-0 w-full h-0.5 bg-gradient-to-r from-purple-100 to-transparent"></div>
+                </div>
+
+                <!-- Шаг 4 -->
+                <div class="relative">
+                    <div class="step-number mx-auto">4</div>
+                    <div class="text-center">
+                        <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center">
+                            <i data-lucide="download" class="text-orange-600 w-10 h-10"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-900 mb-3">Экспорт результатов</h3>
+                        <p class="text-gray-600">
+                            Экспортируйте размеченные данные в нужном формате: COCO, Pascal VOC, YOLO, или через API.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-16">
+                <button class="px-8 py-4 rounded-xl btn-primary text-white font-semibold text-lg shadow-lg">
+                    Попробовать бесплатно
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Футер -->
+    <footer class="bg-gray-900 text-white py-12">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <!-- Логотип и описание -->
+                <div class="col-span-1 md:col-span-2">
+                    <div class="flex items-center space-x-2 mb-6">
+                        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                            <i data-lucide="box-select" class="text-white"></i>
+                        </div>
+                        <span class="text-xl font-bold">ImageAnnotate<span class="text-blue-400">.pro</span></span>
+                    </div>
+                    <p class="text-gray-400 max-w-md mb-6">
+                        Профессиональная платформа для командной разметки изображений с AI-помощником. Ускорьте процесс разметки в 3 раза.
+                    </p>
+                    <div class="flex space-x-4">
+                        <a href="#" class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors">
+                            <i data-lucide="twitter"></i>
+                        </a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors">
+                            <i data-lucide="github"></i>
+                        </a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors">
+                            <i data-lucide="linkedin"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Разделы -->
+                <div>
+                    <h4 class="text-lg font-bold mb-6">Продукт</h4>
+                    <ul class="space-y-4">
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Возможности</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Цены</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Документация</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Обновления</a></li>
+                    </ul>
+                </div>
+
+                <!-- Компания -->
+                <div>
+                    <h4 class="text-lg font-bold mb-6">Компания</h4>
+                    <ul class="space-y-4">
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">О нас</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Блог</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Вакансии</a></li>
+                        <li><a href="#" class="text-gray-400 hover:text-white transition-colors">Контакты</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-800 mt-12 pt-8 text-center md:text-left">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <p class="text-gray-400">© 2023 ImageAnnotate.pro. Все права защищены.</p>
+                    <div class="flex space-x-6 mt-4 md:mt-0">
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">Политика конфиденциальности</a>
+                        <a href="#" class="text-gray-400 hover:text-white transition-colors">Условия использования</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Инициализация Lucide Icons
+        lucide.createIcons();
+
+        // Мобильное меню
+        document.getElementById('mobile-menu-button').addEventListener('click', function() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+
+            // Меняем иконку
+            const icon = this.querySelector('i');
+            if (menu.classList.contains('hidden')) {
+                icon.setAttribute('data-lucide', 'menu');
+            } else {
+                icon.setAttribute('data-lucide', 'x');
+            }
+            lucide.createIcons();
+        });
+
+        // Плавная прокрутка для ссылок
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                if(targetId === '#') return;
+
+                const targetElement = document.querySelector(targetId);
+                if(targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 80,
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+
+</body>
+
+

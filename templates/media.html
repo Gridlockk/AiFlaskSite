@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Media</title>
+
+<style>
+
+body{
+    font-family: Arial;
+    background:#f4f6fb;
+}
+
+.container{
+    padding:30px;
+}
+
+.gallery{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,200px);
+    gap:20px;
+}
+
+.card{
+    background:white;
+    padding:10px;
+    border-radius:10px;
+    box-shadow:0 3px 10px rgba(0,0,0,0.1);
+}
+
+.card img{
+    width:100%;
+    border-radius:8px;
+}
+
+.filename{
+    font-size:12px;
+    margin-top:5px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Media проекта: {{ project.name }}</h2>
+
+<div class="gallery">
+
+{% for image in images %}
+
+<div class="card">
+
+<img src="{{ url_for('static', filename='uploads/' + image.filename) }}">
+
+<div class="filename">
+{{ image.filename }}
+</div>
+
+</div>
+
+{% endfor %}
+
+</div>
+
+</div>
+
+</body>
+</html>

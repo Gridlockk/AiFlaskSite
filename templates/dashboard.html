@@ -495,7 +495,7 @@
 {% endif %}
 
             <!-- пункты меню: участники, media и др. -->
-            <div class="nav-item">
+            <div class="nav-item" onclick="goToUsers()">
                 <i class="fas fa-users"></i>
                 <span>Участники</span>
             </div>
@@ -542,7 +542,7 @@
             <div class="user-info">
 
     <span style="font-size:0.9rem; color:#555;">
-        Role: <b>{{ current_user.role }}</b>
+        Role: <b>{{ role }}</b>
     </span>
 
     <i class="fas fa-bell" style="font-size: 1.3rem; opacity: 0.7;"></i>
@@ -578,17 +578,18 @@
             <div class="annotation-area">
                 <div style="display: flex; justify-content: space-between;">
                     <span style="font-weight: 600; font-size: 1.2rem;">Текущий снимок</span>
-                    <span class="progress-tag"><i class="far fa-image"></i> 24/156</span>
+                    <span class="progress-tag"><i class="far fa-image"></i> {{ total_annotations }}/{{ total_images }}</span>
                 </div>
                 <!-- блок с картинкой (заглушка) -->
-                <div class="image-container">
-                    <div class="image-placeholder">
-                        <i class="fas fa-cloud-upload-alt"></i>
-                        <span>dataset_04/train/img_082.jpg</span>
-                        <div style="background: #2f354a; padding: 8px 24px; border-radius: 20px; margin-top: 10px; color:#d3def0; font-size:0.9rem;">
-                            <i class="fas-regular fa-crop-alt"></i> 4 разметки
+                 <div class="image-container">
+                    {% if media_files %}
+                        <img src="{{ url_for('static', filename='uploads/' + media_files[0]) }}" alt="Снимок" style="max-width:100%; max-height:100%;">
+                    {% else %}
+                        <div class="image-placeholder">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span>Нет изображений</span>
                         </div>
-                    </div>
+                    {% endif %}
                 </div>
 
                 <!-- инструменты разметки -->
@@ -632,73 +633,53 @@
                 <!-- блок участники -->
                 <div class="info-block">
                     <div class="info-header">
-                        <i class="fas fa-users"></i> <span>Участники (3)</span>
+                        <i class="fas fa-users"></i> <span>Участники ({{ users|length }})</span>
                     </div>
+					{% for u in users %}
                     <div class="participant">
-                        <div class="participant-avatar">ЕК</div>
+                        <div class="participant-avatar">{{ u.username[:2] }}</div>
                         <div class="participant-info">
-                            <div class="participant-name">Елена К.</div>
-                            <div class="participant-role">разметчик</div>
+                            <div class="participant-name">{{ u.username }}</div>
+                            <div class="participant-role">{{ u.role }}</div>
                         </div>
                         <i class="fas fa-circle" style="color: #22c55e; font-size: 0.6rem;"></i>
                     </div>
-                    <div class="participant">
-                        <div class="participant-avatar">ДМ</div>
-                        <div class="participant-info">
-                            <div class="participant-name">Дмитрий М.</div>
-                            <div class="participant-role">верификатор</div>
-                        </div>
-                        <i class="fas fa-circle" style="color: #22c55e;"></i>
-                    </div>
-                    <div class="participant">
-                        <div class="participant-avatar">АЯ</div>
-                        <div class="participant-info">
-                            <div class="participant-name">Анна Я.</div>
-                            <div class="participant-role">наблюдатель</div>
-                        </div>
-                        <i class="fas fa-circle" style="color: #94a3b8;"></i>
-                    </div>
+					{% endfor %}
+                    
                 </div>
 
                 <!-- блок media (последние файлы) -->
                 <div class="info-block">
                     <div class="info-header">
                         <i class="fas fa-photo-video"></i> <span>Медиа / сессии</span>
+						
                     </div>
+					{% for file in media_files %}
                     <div class="media-thumb">
-                        <i class="fas fa-image"></i>
+                        {% if file.lower().endswith(('.mp4')) %}
+                            <i class="fas fa-video"></i>
+                        {% else %}
+                            <i class="fas fa-image"></i>
+                        {% endif %}
                         <div class="media-info">
-                            <div>IMG_045.jpg</div>
-                            <small>2.3 МБ · 12.04</small>
+                            <div>{{ file }}</div>
                         </div>
                     </div>
-                    <div class="media-thumb">
-                        <i class="fas fa-video"></i>
-                        <div class="media-info">
-                            <div>clip_07.mp4</div>
-                            <small>14.8 МБ · 12.04</small>
-                        </div>
-                    </div>
-                    <div class="media-thumb">
-                        <i class="fas fa-image"></i>
-                        <div class="media-info">
-                            <div>frame_202.jpg</div>
-                            <small>1.1 МБ · 11.04</small>
-                        </div>
+                    {% endfor %}
+                        
                     </div>
                 </div>
 
                 <!-- статус задания -->
                 <div class="info-block">
-                    <div class="info-header">
-                        <i class="fas fa-flag-checkered"></i> <span>Прогресс</span>
-                    </div>
+                    <div class="info-header"><i class="fas fa-flag-checkered"></i> <span>Прогресс</span></div>
                     <div style="background: #edf2f9; border-radius: 100px; height: 10px;">
-                        <div style="width: 64%; background: #2f4870; height: 10px; border-radius: 100px;"></div>
+                        {% set progress = (total_annotations / total_images * 100) if total_images > 0 else 0 %}
+                        <div style="width: {{ progress }}%; background: #2f4870; height: 10px; border-radius: 100px;"></div>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
-                        <span style="font-size:0.9rem;">Выполнено: 64%</span>
-                        <span style="font-size:0.9rem;">осталось 87</span>
+                        <span style="font-size:0.9rem;">Выполнено: {{ progress|round(0) }}%</span>
+                        <span style="font-size:0.9rem;">Осталось: {{ total_images - total_annotations }}</span>
                     </div>
                 </div>
 
@@ -722,6 +703,14 @@
             sidebar.classList.toggle('collapsed');
         });
     })();
+	
+	
+	function goToUsers() {
+    const parts = window.location.pathname.split("/");
+    const projectId = parts[2]; // /project/3
+
+    window.location.href = "/project/" + projectId + "/UsersList";
+}
 </script>
 
 <!-- Комментарий: интерфейс рабочего кабинета разметки данных,

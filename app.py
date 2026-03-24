@@ -22,8 +22,9 @@ class Role:
 
 # ======== Модели ========
 user_project = db.Table('user_project',
-    db.Column('user_id', db.Integer, db.ForeignKey('user.id')),
-    db.Column('project_id', db.Integer, db.ForeignKey('project.id'))
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('project_id', db.Integer, db.ForeignKey('project.id'), primary_key=True),
+    db.Column('role', db.String(20), default=Role.ANNOTATOR)
 )
 
 class User(db.Model, UserMixin):
@@ -32,16 +33,63 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
     team = db.Column(db.String(100), default="Моя команда")
-    role = db.Column(db.String(20), default=Role.ANNOTATOR)
     projects = db.relationship('Project', secondary=user_project, back_populates='users')
     annotations = db.relationship('Annotation', backref='creator', lazy=True)
 
 class Project(db.Model):
+
+
+
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+
+    # название проекта
+    name = db.Column(db.String(120), nullable=False)
+
+    # описание
     description = db.Column(db.Text)
-    users = db.relationship('User', secondary=user_project, back_populates='projects')
-    images = db.relationship('Image', backref='project', lazy=True)
+
+    # статус проекта
+    status = db.Column(
+        db.String(20),
+        default="active"   # active / completed / paused
+    )
+
+    # дата создания
+    created_at = db.Column(
+        db.DateTime,
+        default=db.func.now()
+    )
+
+    # дата последнего обновления
+    updated_at = db.Column(
+        db.DateTime,
+        default=db.func.now(),
+        onupdate=db.func.now()
+    )
+
+    # пользователи проекта
+    users = db.relationship(
+        "User",
+        secondary=user_project,
+        back_populates="projects"
+    )
+
+    # изображения проекта
+    images = db.relationship(
+        "Image",
+        backref="project",
+        lazy=True,
+        cascade="all, delete"
+    )
+
+    # --- удобные свойства ---
+
+    @property
+    def image_count(self):
+        return len(self.images)
+
+    def __repr__(self):
+        return f"<Project {self.name}>"
 
 class Image(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -58,6 +106,16 @@ class Annotation(db.Model):
     height = db.Column(db.Float)
     label = db.Column(db.String(50))
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+
+def get_user_role(user, project):
+    link = db.session.execute(
+        user_project.select().where(
+            (user_project.c.user_id == user.id) &
+            (user_project.c.project_id == project.id)
+        )
+    ).first()
+    return link.role if link else None
 
 # ======== Декоратор для роли ========
 def role_required(role):
@@ -118,6 +176,74 @@ def register():
 
     return render_template('register.html')
 
+
+@app.route('/project_select')
+@login_required
+def project_select():
+    projects = current_user.projects  # все проекты, в которых участвует пользователь
+
+    projects_info = []
+    for project in projects:
+        role = get_user_role(current_user, project)
+        projects_info.append({
+            "project": project,
+            "role": role
+        })
+
+    return render_template(
+        "project_select.html",
+        projects_info=projects_info
+    )
+
+
+@app.route('/create_project', methods=['POST'])
+@login_required
+def create_project():
+    # получаем данные из формы
+    name = request.form.get("name")
+    description = request.form.get("description")
+
+    if not name:
+        flash("Название проекта обязательно", "danger")
+        return redirect(url_for("project_select"))
+
+    # создаём проект
+    project = Project(name=name, description=description)
+    db.session.add(project)
+    db.session.commit()
+
+    # автоматически добавляем текущего пользователя в проект с ролью ADMIN
+    db.session.execute(user_project.insert().values(
+        user_id=current_user.id,
+        project_id=project.id,
+        role=Role.ADMIN
+    ))
+    db.session.commit()
+
+    flash(f"Проект '{name}' создан. Вы администратор проекта.", "success")
+    return redirect(url_for("project_select"))
+
+
+def role_required_for_project(required_role):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # пытаемся получить project_id из URL или формы
+            project_id = kwargs.get('project_id') or request.form.get('project_id')
+            project = Project.query.get(project_id)
+            if not project:
+                flash("Проект не найден", "danger")
+                return redirect(url_for('dashboard'))
+
+            role = get_user_role(current_user, project)
+            if role != required_role:
+                flash("Доступ запрещён", "danger")
+                return redirect(url_for('dashboard'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
 @app.route('/login', methods=['GET','POST'])
 def login():
     if request.method == 'POST':
@@ -126,7 +252,7 @@ def login():
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password, password):
             login_user(user)
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('project_select'))
         flash("Неверный email или пароль", "danger")
     return render_template('login.html')
 
@@ -136,40 +262,201 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# ======== Дашборд ========
-@app.route('/dashboard')
+
+@app.route('/project/<int:project_id>/UsersList')
 @login_required
-def dashboard():
+def project_users_list(project_id):
 
-    # ===== Проекты =====
-    if current_user.role == Role.ADMIN:
-        projects = Project.query.all()
-        users = User.query.all()
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+
+    if role != Role.ADMIN:
+        flash("Только администратор может управлять пользователями", "danger")
+        return redirect(url_for("project_dashboard", project_id=project.id))
+
+    users_data = []
+
+    for user in project.users:
+        user_role = db.session.execute(
+            user_project.select().where(
+                (user_project.c.user_id == user.id) &
+                (user_project.c.project_id == project.id)
+            )
+        ).first()
+
+        users_data.append({
+            "user": user,
+            "role": user_role.role
+        })
+
+    print("=== DEBUG USERS LIST ===")
+    print("Project:", project.id, project.name)
+    print("Current user:", current_user.id, current_user.username)
+    print("Current role:", role)
+
+    print("Users in project:")
+    for u in users_data:
+        print("User:", u["user"].id, u["user"].username, "| Role:", u["role"])
+
+    print("Total users:", len(users_data))
+    print("========================")
+
+
+    return render_template(
+        "users_list.html",
+        project=project,
+        users=users_data,
+        role=role
+    )
+
+
+@app.route('/project/<int:project_id>/add_user', methods=['POST'])
+@login_required
+def add_user(project_id):
+
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+
+    if role != Role.ADMIN:
+        flash("Нет доступа", "danger")
+        return redirect(url_for("project_users_list", project_id=project.id))
+
+    email = request.form.get("email")
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        flash("Пользователь не найден", "danger")
+        return redirect(url_for("project_users_list", project_id=project.id))
+
+    existing = db.session.execute(
+        user_project.select().where(
+            (user_project.c.user_id == user.id) &
+            (user_project.c.project_id == project.id)
+        )
+    ).first()
+
+    if existing:
+        flash("Пользователь уже в проекте", "warning")
+        return redirect(url_for("project_users_list", project_id=project.id))
+
+    db.session.execute(user_project.insert().values(
+        user_id=user.id,
+        project_id=project.id,
+        role=Role.ANNOTATOR
+    ))
+
+    db.session.commit()
+
+    flash("Пользователь добавлен", "success")
+
+    return redirect(url_for("project_users_list", project_id=project.id))
+
+
+@app.route('/project/<int:project_id>/remove_user', methods=['POST'])
+@login_required
+def remove_user(project_id):
+
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+
+    if role != Role.ADMIN:
+        flash("Нет доступа", "danger")
+        return redirect(url_for("project_users_list", project_id=project.id))
+
+    user_id = request.form.get("user_id")
+
+    if int(user_id) == current_user.id:
+        flash("Нельзя удалить самого себя", "danger")
+        return redirect(url_for("project_users_list", project_id=project.id))
+
+    db.session.execute(
+        user_project.delete().where(
+            (user_project.c.user_id == user_id) &
+            (user_project.c.project_id == project.id)
+        )
+    )
+
+    db.session.commit()
+
+    flash("Пользователь удалён", "success")
+
+    return redirect(url_for("project_users_list", project_id=project.id))
+
+
+
+@app.route('/project/<int:project_id>/change_role', methods=['POST'])
+@login_required
+def change_role(project_id):
+
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+
+    if role != Role.ADMIN:
+        flash("Нет доступа", "danger")
+        return redirect(url_for("project_users_list", project_id=project.id))
+
+    user_id = request.form.get("user_id")
+    new_role = request.form.get("role")
+
+    db.session.execute(
+        user_project.update().where(
+            (user_project.c.user_id == user_id) &
+            (user_project.c.project_id == project.id)
+        ).values(role=new_role)
+    )
+
+    db.session.commit()
+
+    flash("Роль обновлена", "success")
+
+    return redirect(url_for("project_users_list", project_id=project.id))
+
+
+# ======== Роут проекта ========
+@app.route('/project/<int:project_id>')
+@login_required
+def project_dashboard(project_id):
+    # Получаем проект
+    project = Project.query.get_or_404(project_id)
+
+    # Проверяем, что пользователь участвует в проекте
+    role = get_user_role(current_user, project)
+    if not role:
+        flash("У вас нет доступа к этому проекту", "danger")
+        return redirect(url_for('project_select'))
+
+    # ===== Пользователи =====
+    if role == Role.ADMIN:
+        users = project.users  # показываем всех пользователей проекта
     else:
-        projects = current_user.projects
-        users = []
+        users = []  # анотаторы видят только себя / минимальные данные
 
-    # ===== Media (файлы из папки uploads) =====
-    media_files = []
+    # ===== Media (изображения проекта) =====
+    images = Image.query.filter_by(project_id=project.id).all()
 
-    media_path = app.config['UPLOAD_FOLDER']
-
-    if os.path.exists(media_path):
-        for file in os.listdir(media_path):
-
-            # фильтр изображений
-            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.mp4')):
-                media_files.append(file)
+    # ===== Статистика для проекта =====
+    total_images = len(images)
+    total_annotations = sum(len(img.annotations) for img in images)
 
     return render_template(
         "dashboard.html",
-        projects=projects,
+        projects=[project],   # передаём список с одним проектом для совместимости шаблона
         users=users,
-        media_files=media_files,
-        role=current_user.role
+        media_files=[img.filename for img in images],
+        role=role,
+        project=project,
+        total_images=total_images,
+        total_annotations=total_annotations
     )
 
-# ======== Создание проекта (только админ) ========
+
+
+
 
 
 # ======== Загрузка изображения (только админ) ========
@@ -235,7 +522,7 @@ def save_annotation():
 
 @app.route('/add_user_to_project', methods=['POST'])
 @login_required
-@role_required(Role.ADMIN)
+@role_required_for_project(Role.ADMIN)
 def add_user_to_project():
 
     user_id = request.form.get("user_id")
@@ -251,33 +538,15 @@ def add_user_to_project():
 
     return redirect(url_for("dashboard"))
 
-@app.route('/create_project', methods=['POST'])
-@login_required
-@role_required(Role.ADMIN)
-def create_project():
 
-    name = request.form.get("name")
-    description = request.form.get("description")
-
-    project = Project(
-        name=name,
-        description=description
-    )
-
-    db.session.add(project)
-    db.session.commit()
-
-    flash("Проект создан", "success")
-
-    return redirect(url_for("dashboard"))
 
 def create_default_admin():
     admin = User.query.filter_by(email="admin@admin.com").first()
 
     if not admin:
         admin = User(
-            username="Admin",
-            email="admin@admin.com",
+            username="admin",
+            email="admin",
             password=generate_password_hash("admin"),
             role=Role.ADMIN
         )

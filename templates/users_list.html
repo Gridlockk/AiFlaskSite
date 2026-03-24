@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление пользователями · LabelKit</title>
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #f2f4f8;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* --- Боковая панель (бургер-меню) --- */
+        .sidebar {
+            background-color: #1e1f2a;
+            color: #eaeef2;
+            height: 100%;
+            transition: width 0.25s ease;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+            width: 260px;
+        }
+
+        .sidebar.collapsed {
+            width: 80px;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 16px;
+            border-bottom: 1px solid #333544;
+        }
+
+        .burger-btn {
+            background: none;
+            border: none;
+            color: #b0b9d4;
+            font-size: 1.8rem;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .burger-btn:hover {
+            background-color: #2c2f3f;
+            color: white;
+        }
+
+        .sidebar-header h3 {
+            font-weight: 500;
+            font-size: 1.25rem;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            white-space: nowrap;
+        }
+
+        .sidebar.collapsed .sidebar-header h3 {
+            display: none;
+        }
+
+        .nav-menu {
+            flex: 1;
+            padding: 24px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            color: #b0b9d4;
+            transition: all 0.2s;
+            cursor: pointer;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+
+        .nav-item i {
+            font-size: 1.5rem;
+            min-width: 32px;
+            text-align: center;
+        }
+
+        .nav-item span {
+            font-size: 1rem;
+            font-weight: 450;
+        }
+
+        .nav-item:hover {
+            background-color: #2c2f3f;
+            color: white;
+        }
+
+        .sidebar.collapsed .nav-item span {
+            display: none;
+        }
+
+        .sidebar.collapsed .nav-item {
+            justify-content: center;
+            padding: 12px 0;
+        }
+
+        .sidebar-footer {
+            padding: 20px 8px;
+            border-top: 1px solid #333544;
+        }
+
+        /* --- Основная рабочая область --- */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            background-color: #f8fafd;
+        }
+
+        .top-bar {
+            background-color: white;
+            padding: 12px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+
+        .project-title h2 {
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: #1e293b;
+        }
+
+        .badge {
+            background-color: #e9ecf3;
+            color: #2d3a5e;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #2d3a5e;
+        }
+
+        .user-avatar {
+            background-color: #3b4b6e;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* Рабочая область */
+        .workspace {
+            padding: 28px 32px;
+            display: flex;
+            gap: 28px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+
+        /* Таблица пользователей */
+        .users-table-area {
+            flex: 2.5;
+            min-width: 380px;
+            background-color: white;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px -8px rgba(0,0,0,0.06);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            border-bottom: 1px solid #eef2f6;
+            padding-bottom: 14px;
+        }
+
+        .section-header h3 {
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .user-count {
+            background: #eef2fa;
+            padding: 5px 12px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .users-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .users-table th {
+            text-align: left;
+            padding: 12px 8px;
+            color: #4b5a77;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #eef2f8;
+        }
+
+        .users-table td {
+            padding: 14px 8px;
+            border-bottom: 1px solid #f0f4fa;
+            color: #1f2b41;
+            vertical-align: middle;
+        }
+
+        .users-table tr:hover {
+            background-color: #fafcff;
+        }
+
+        .role-select {
+            background: #f1f4f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 30px;
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: #7c8aa8;
+            transition: 0.2s;
+            padding: 6px;
+            border-radius: 30px;
+        }
+
+        .btn-icon:hover {
+            background: #eef2f8;
+            color: #2d4059;
+        }
+
+        .btn-danger:hover {
+            color: #dc2626;
+            background: #fee2e2;
+        }
+
+        .btn-update {
+            background: #eef2f8;
+            border: none;
+            border-radius: 30px;
+            padding: 6px 14px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-update:hover {
+            background: #2d4059;
+            color: white;
+        }
+
+        /* Правая панель */
+        .info-sidebar {
+            flex: 1;
+            min-width: 280px;
+            background-color: white;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px -8px rgba(0,0,0,0.06);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .info-block {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: #1f2b41;
+            border-bottom: 1px solid #eef2f6;
+            padding-bottom: 12px;
+        }
+
+        .info-header i {
+            color: #3f5575;
+            font-size: 1.2rem;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            font-size: 0.9rem;
+            transition: 0.2s;
+            outline: none;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: #8ba0bc;
+            box-shadow: 0 0 0 2px rgba(47,72,112,0.1);
+        }
+
+        .submit-btn {
+            background: #2d4059;
+            color: white;
+            border: none;
+            border-radius: 40px;
+            padding: 10px 20px;
+            font-weight: 500;
+            width: 100%;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .submit-btn:hover {
+            background: #1f2b41;
+        }
+
+        .info-note {
+            background: #f4f7fc;
+            border-radius: 18px;
+            padding: 14px;
+            font-size: 0.85rem;
+            color: #476085;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .flash-message {
+            background: #fff3cd;
+            padding: 12px 20px;
+            border-radius: 12px;
+            margin: 0 28px 12px 28px;
+            color: #856404;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        @media (max-width: 900px) {
+            .workspace {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- Боковая панель -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="burger-btn" id="burgerToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h3>Label<span style="font-weight: 300;">Kit</span></h3>
+        </div>
+        <div class="nav-menu">
+            <a href="{{ url_for('dashboard') }}" class="nav-item" style="text-decoration:none;">
+                <i class="fas fa-chalkboard-user"></i>
+                <span>Дашборд</span>
+            </a>
+            <a href="" class="nav-item" style="text-decoration:none; background:#2c2f3f; color:white;">
+                <i class="fas fa-users"></i>
+                <span>Участники</span>
+            </a>
+            <a href="{{ url_for('media') }}" class="nav-item" style="text-decoration:none;">
+                <i class="fas fa-photo-video"></i>
+                <span>Media</span>
+            </a>
+            <div class="nav-item" onclick="alert('Страница заданий')">
+                <i class="fas fa-tasks"></i>
+                <span>Задания</span>
+            </div>
+            <div class="nav-item" onclick="alert('Аналитика')">
+                <i class="fas fa-chart-pie"></i>
+                <span>Дашборд</span>
+            </div>
+            <div class="nav-item" onclick="alert('Настройки')">
+                <i class="fas fa-cog"></i>
+                <span>Настройки</span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <a href="{{ url_for('logout') }}" class="nav-item" style="text-decoration:none;">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Выйти</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Основной контент -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div class="project-title">
+                <h2>
+                    {% if project %}
+                        {{ project.name }}
+                    {% else %}
+                        Проект не выбран
+                    {% endif %}
+                </h2>
+                <div class="badge"><i class="fas fa-user-friends"></i> Управление участниками</div>
+            </div>
+            <div class="user-info">
+                <i class="fas fa-bell" style="font-size: 1.3rem; opacity: 0.7;"></i>
+                <div class="user-avatar">
+                    {{ current_user.username[:2] if current_user else 'U' }}
+                </div>
+                <span style="font-size:0.85rem; font-weight:500;">{{ current_user.username if current_user else 'Гость' }}</span>
+                <span style="font-size:0.8rem; background:#eef2f9; padding:2px 8px; border-radius:20px;">{{ current_user.role if current_user else 'annotator' }}</span>
+            </div>
+        </div>
+
+        <!-- Флеш-сообщения -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message">
+                        <i class="fas fa-info-circle"></i> {{ message }}
+                        <i class="fas fa-times" style="cursor:pointer;" onclick="this.parentElement.remove()"></i>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="workspace">
+            <!-- Таблица пользователей -->
+            <div class="users-table-area">
+                <div class="section-header">
+                    <h3><i class="fas fa-users-viewfinder"></i> Участники проекта</h3>
+                    <div class="user-count">
+                        <i class="fas fa-user-check"></i> Всего: <span id="totalUsersCount">{{ users|length if users else 0 }}</span>
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table class="users-table" id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Имя пользователя</th>
+                                <th>Роль</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if users %}
+                                {% for user in users %}
+                                <tr data-user-id="{{ user.id }}" data-username="{{ user.username }}">
+                                    <td>{{ user.id }}</td>
+                                    <td>{{ user.username }}</td>
+                                    <td>
+                                        <select class="role-select" data-user-id="{{ user.id }}" id="role-{{ user.id }}">
+                                            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                                            <option value="annotator" {% if user.role == 'annotator' %}selected{% endif %}>Annotator</option>
+                                        </select>
+                                    </td>
+                                    <td class="action-buttons">
+                                        <button class="btn-update" onclick="updateRole({{ user.id }})">
+                                            <i class="fas fa-save"></i> Изменить
+                                        </button>
+                                        <button class="btn-icon btn-danger" onclick="removeUser({{ user.id }}, '{{ user.username }}')">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" style="text-align:center; padding: 40px;">Нет участников в этом проекте</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Правая панель: добавление пользователя и информация -->
+            <div class="info-sidebar">
+                {% if role == 'admin' %}
+                <div class="info-block">
+                    <div class="info-header">
+                        <i class="fas fa-user-plus"></i> <span>Добавить участника</span>
+                    </div>
+                    <form id="addUserForm" onsubmit="addUserToProject(event)">
+                        <div class="form-group">
+                            <input type="number" id="userIdInput" placeholder="ID пользователя" required>
+                        </div>
+                        <div class="form-group">
+                            <select id="newUserRole">
+                                <option value="annotator">Annotator (разметчик)</option>
+                                <option value="admin">Admin (администратор)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="submit-btn"><i class="fas fa-plus-circle"></i> Добавить в проект</button>
+                    </form>
+                    <div class="info-note">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Пользователь должен быть зарегистрирован в системе. После добавления ему будет назначена выбранная роль в текущем проекте.</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="info-block">
+                    <div class="info-header">
+                        <i class="fas fa-lock"></i> <span>Доступ ограничен</span>
+                    </div>
+                    <div class="info-note">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>Только администратор проекта может управлять участниками.</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="info-block">
+                    <div class="info-header">
+                        <i class="fas fa-chart-simple"></i> <span>О проекте</span>
+                    </div>
+                    <div style="background:#f8fafd; border-radius: 20px; padding: 16px;">
+                        <div><i class="fas fa-tag"></i> Название: <strong>{{ project.name if project else '—' }}</strong></div>
+                        <div style="margin-top: 12px;"><i class="fas fa-align-left"></i> Описание: {{ project.description if project and project.description else 'Нет описания' }}</div>
+                        <div style="margin-top: 12px;"><i class="fas fa-calendar-alt"></i> Создан: {{ project.created_at.strftime('%d.%m.%Y') if project and project.created_at else '—' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    // Бургер-меню
+    (function() {
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('burgerToggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                sidebar.classList.toggle('collapsed');
+            });
+        }
+    })();
+
+    // Функция обновления роли пользователя
+    window.updateRole = function(userId) {
+        const selectEl = document.getElementById(`role-${userId}`);
+        if (!selectEl) return;
+        const newRole = selectEl.value;
+        // Отправляем POST-запрос на сервер
+        fetch('/update_user_role', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()  // если используется CSRF
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                role: newRole,
+                project_id: {{ project.id if project else 'null' }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showFlashMessage('Роль пользователя успешно изменена', 'success');
+                // Можно обновить счетчик или статус без перезагрузки
+            } else {
+                showFlashMessage(data.error || 'Ошибка при изменении роли', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showFlashMessage('Ошибка сети. Попробуйте позже.', 'error');
+        });
+    };
+
+    // Удаление пользователя из проекта
+    window.removeUser = function(userId, username) {
+        if (!confirm(`Вы действительно хотите удалить пользователя "${username}" из проекта?`)) return;
+        fetch('/remove_user_from_project', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                user_id: userId,
+                project_id: {{ project.id if project else 'null' }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Удаляем строку из таблицы
+                const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+                if (row) row.remove();
+                // Обновляем счетчик
+                const totalSpan = document.getElementById('totalUsersCount');
+                if (totalSpan) {
+                    let current = parseInt(totalSpan.innerText);
+                    totalSpan.innerText = current - 1;
+                }
+                showFlashMessage(`Пользователь ${username} удалён из проекта`, 'success');
+                // Если после удаления таблица пуста, показать сообщение
+                const tbody = document.querySelector('#usersTable tbody');
+                if (tbody && tbody.children.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 40px;">Нет участников в этом проекте</td></tr>';
+                }
+            } else {
+                showFlashMessage(data.error || 'Ошибка при удалении', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showFlashMessage('Ошибка сети', 'error');
+        });
+    };
+
+    // Добавление пользователя в проект
+    window.addUserToProject = function(event) {
+        event.preventDefault();
+        const userId = document.getElementById('userIdInput').value;
+        const role = document.getElementById('newUserRole').value;
+        if (!userId) {
+            showFlashMessage('Введите ID пользователя', 'error');
+            return;
+        }
+        fetch('/add_user_to_project', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                user_id: parseInt(userId),
+                role: role,
+                project_id: {{ project.id if project else 'null' }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Добавляем новую строку в таблицу
+                const newUser = data.user; // ожидаем { id, username, role }
+                if (newUser) {
+                    addUserRowToTable(newUser.id, newUser.username, newUser.role);
+                    document.getElementById('userIdInput').value = '';
+                    showFlashMessage(`Пользователь ${newUser.username} добавлен в проект`, 'success');
+                    // Обновляем счетчик
+                    const totalSpan = document.getElementById('totalUsersCount');
+                    if (totalSpan) {
+                        let current = parseInt(totalSpan.innerText);
+                        totalSpan.innerText = current + 1;
+                    }
+                } else {
+                    showFlashMessage('Пользователь добавлен, но данные не получены', 'info');
+                }
+            } else {
+                showFlashMessage(data.error || 'Не удалось добавить пользователя', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showFlashMessage('Ошибка сети', 'error');
+        });
+    };
+
+    // Вспомогательная функция для добавления строки в таблицу
+    function addUserRowToTable(userId, username, role) {
+        const tbody = document.querySelector('#usersTable tbody');
+        // Если есть заглушка "Нет участников", удаляем её
+        if (tbody.children.length === 1 && tbody.children[0].innerText.includes('Нет участников')) {
+            tbody.innerHTML = '';
+        }
+        const newRow = document.createElement('tr');
+        newRow.setAttribute('data-user-id', userId);
+        newRow.setAttribute('data-username', username);
+        newRow.innerHTML = `
+            <td>${userId}</td>
+            <td>${escapeHtml(username)}</td>
+            <td>
+                <select class="role-select" data-user-id="${userId}" id="role-${userId}">
+                    <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
+                    <option value="annotator" ${role === 'annotator' ? 'selected' : ''}>Annotator</option>
+                </select>
+            </td>
+            <td class="action-buttons">
+                <button class="btn-update" onclick="updateRole(${userId})">
+                    <i class="fas fa-save"></i> Изменить
+                </button>
+                <button class="btn-icon btn-danger" onclick="removeUser(${userId}, '${escapeHtml(username)}')">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(newRow);
+    }
+
+    // Отображение временного флеш-сообщения (заглушка, можно заменить на системные)
+    function showFlashMessage(message, type = 'info') {
+        const container = document.querySelector('.main-content');
+        const flashDiv = document.createElement('div');
+        flashDiv.className = 'flash-message';
+        flashDiv.style.backgroundColor = type === 'error' ? '#f8d7da' : (type === 'success' ? '#d4edda' : '#fff3cd');
+        flashDiv.style.color = type === 'error' ? '#721c24' : (type === 'success' ? '#155724' : '#856404');
+        flashDiv.innerHTML = `<i class="fas ${type === 'error' ? 'fa-exclamation-triangle' : (type === 'success' ? 'fa-check-circle' : 'fa-info-circle')}"></i> ${escapeHtml(message)} <i class="fas fa-times" style="cursor:pointer; margin-left:12px;" onclick="this.parentElement.remove()"></i>`;
+        // Вставляем после top-bar
+        const topBar = document.querySelector('.top-bar');
+        topBar.insertAdjacentElement('afterend', flashDiv);
+        setTimeout(() => {
+            if (flashDiv.parentElement) flashDiv.remove();
+        }, 5000);
+    }
+
+    // Получение CSRF-токена (если используется)
+    function getCsrfToken() {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') : '';
+    }
+
+    // Экранирование HTML
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+</script>
+</body>
+</html>

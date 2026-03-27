@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Разметка · {{ image.filename }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+
+        body { background: #f2f4f8; height: 100vh; overflow: hidden; }
+
+        .app { display: flex; height: 100vh; width: 100%; }
+
+        /* ── Сайдбар ── */
+        .sidebar {
+            background: #1e1f2a;
+            color: #eaeef2;
+            height: 100%;
+            width: 260px;
+            transition: width 0.25s ease;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+        }
+        .sidebar.collapsed { width: 80px; }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 16px;
+            border-bottom: 1px solid #333544;
+        }
+        .sidebar-header h3 { font-weight: 500; font-size: 1.25rem; color: #fff; white-space: nowrap; }
+        .sidebar.collapsed .sidebar-header h3 { display: none; }
+
+        .burger-btn {
+            background: none; border: none; color: #b0b9d4;
+            font-size: 1.8rem; cursor: pointer;
+            width: 40px; height: 40px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 8px; transition: background 0.2s;
+        }
+        .burger-btn:hover { background: #2c2f3f; color: white; }
+
+        .nav-menu { flex: 1; padding: 24px 8px; display: flex; flex-direction: column; gap: 8px; }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 16px;
+            padding: 12px 16px; border-radius: 12px;
+            color: #b0b9d4; transition: all 0.2s;
+            cursor: pointer; white-space: nowrap; text-decoration: none;
+        }
+        .nav-item i { font-size: 1.5rem; min-width: 32px; text-align: center; }
+        .nav-item span { font-size: 1rem; font-weight: 450; }
+        .nav-item:hover { background: #2c2f3f; color: white; }
+        .nav-item.active { background: #2c2f3f; color: white; }
+
+        .sidebar.collapsed .nav-item span { display: none; }
+        .sidebar.collapsed .nav-item { justify-content: center; padding: 12px 0; }
+
+        .sidebar-footer { padding: 20px 8px; border-top: 1px solid #333544; }
+
+        /* ── Правая часть ── */
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        .top-bar {
+            background: white; padding: 12px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+            flex-shrink: 0;
+        }
+        .top-bar h2 { font-weight: 600; font-size: 1.2rem; color: #1e293b; }
+        .top-bar .breadcrumb { font-size: 0.85rem; color: #7a8aa8; margin-top: 2px; }
+        .user-info { display: flex; align-items: center; gap: 12px; color: #2d3a5e; }
+        .user-avatar {
+            background: #3b4b6e; color: white;
+            width: 40px; height: 40px; border-radius: 40px;
+            display: flex; align-items: center; justify-content: center; font-weight: bold;
+        }
+
+        /* ── Рабочая зона ── */
+        .workspace { flex: 1; display: flex; overflow: hidden; }
+
+        /* ── Canvas-зона ── */
+        .canvas-area {
+            flex: 1; display: flex; flex-direction: column;
+            background: #1a1e2b; position: relative; overflow: hidden;
+        }
+
+        .canvas-toolbar {
+            background: #22253a; padding: 10px 20px;
+            display: flex; align-items: center; gap: 12px;
+            border-bottom: 1px solid #333544; flex-shrink: 0; flex-wrap: wrap;
+        }
+
+        .tool-btn {
+            background: #2c2f3f; border: 1px solid #3f4a62;
+            border-radius: 8px; padding: 8px 14px;
+            color: #b0b9d4; font-size: 0.85rem; cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+            transition: 0.2s;
+        }
+        .tool-btn:hover { background: #3a3e52; color: white; }
+        .tool-btn.active { background: #3b6cf6; border-color: #2f5de0; color: white; }
+        .tool-btn.danger { background: #7f1d1d; border-color: #991b1b; color: #fca5a5; }
+        .tool-btn.danger:hover { background: #991b1b; color: white; }
+        .tool-btn.success { background: #14532d; border-color: #166534; color: #86efac; }
+        .tool-btn.success:hover { background: #166534; color: white; }
+
+        .divider { width: 1px; background: #3f4a62; height: 28px; margin: 0 4px; }
+
+        .zoom-info { color: #7a8aa8; font-size: 0.8rem; margin-left: auto; }
+
+        .canvas-wrapper {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; position: relative; cursor: crosshair;
+        }
+
+        #annotationCanvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* ── Правая панель ── */
+        .right-panel {
+            width: 300px; background: #f8fafd;
+            border-left: 1px solid #e2e8f0;
+            display: flex; flex-direction: column;
+            overflow: hidden; flex-shrink: 0;
+        }
+
+        .panel-section {
+            padding: 16px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .panel-title {
+            font-size: 0.8rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            color: #5f6c84; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 6px;
+        }
+
+        /* Выбор метки */
+        .label-input-wrap { display: flex; gap: 8px; margin-bottom: 10px; }
+        .label-input {
+            flex: 1; padding: 8px 12px; border-radius: 8px;
+            border: 1px solid #e2e8f0; font-size: 0.9rem;
+            background: white; outline: none;
+        }
+        .label-input:focus { border-color: #3b6cf6; box-shadow: 0 0 0 2px rgba(59,108,246,0.1); }
+
+        .label-add-btn {
+            background: #3b6cf6; color: white; border: none;
+            border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 0.9rem;
+        }
+        .label-add-btn:hover { background: #2f5de0; }
+
+        .labels-list { display: flex; flex-wrap: wrap; gap: 6px; }
+
+        .label-tag {
+            padding: 4px 10px; border-radius: 20px;
+            font-size: 0.8rem; cursor: pointer;
+            border: 2px solid transparent;
+            transition: 0.15s;
+        }
+        .label-tag.selected { border-color: #1e293b; font-weight: 600; }
+
+        /* Список аннотаций */
+        .annotations-scroll { flex: 1; overflow-y: auto; padding: 12px 16px; }
+
+        .ann-item {
+            background: white; border-radius: 10px;
+            padding: 10px 12px; margin-bottom: 8px;
+            display: flex; align-items: center; gap: 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+            border-left: 4px solid #3b6cf6;
+        }
+        .ann-item-label { flex: 1; font-size: 0.9rem; font-weight: 500; color: #1e293b; }
+        .ann-item-coords { font-size: 0.72rem; color: #7a8aa8; }
+        .ann-delete {
+            background: none; border: none; color: #c0c9d8;
+            cursor: pointer; font-size: 1rem; padding: 2px;
+            transition: 0.15s;
+        }
+        .ann-delete:hover { color: #ef4444; }
+
+        /* Нижняя кнопка сохранения */
+        .save-section { padding: 14px 16px; border-top: 1px solid #e2e8f0; }
+
+        .save-btn {
+            width: 100%; padding: 12px;
+            background: #2d4059; color: white;
+            border: none; border-radius: 12px;
+            font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; transition: 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .save-btn:hover { background: #1f2b41; }
+        .save-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        .nav-btn {
+            display: flex; gap: 8px; margin-top: 10px;
+        }
+        .nav-btn a {
+            flex: 1; padding: 8px; text-align: center;
+            background: #eef2f8; color: #2d4059;
+            border-radius: 10px; text-decoration: none;
+            font-size: 0.85rem; font-weight: 500;
+            transition: 0.2s;
+        }
+        .nav-btn a:hover { background: #dde5f0; }
+
+        .status-bar {
+            background: #22253a; color: #7a8aa8;
+            font-size: 0.75rem; padding: 4px 20px;
+            display: flex; gap: 20px; flex-shrink: 0;
+        }
+
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: #1e293b; color: white;
+            padding: 12px 20px; border-radius: 12px;
+            font-size: 0.9rem; z-index: 1000;
+            transform: translateY(80px); opacity: 0;
+            transition: 0.3s; pointer-events: none;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: #166534; }
+        .toast.error { background: #991b1b; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- Сайдбар -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="burger-btn" id="burgerToggle"><i class="fas fa-bars"></i></button>
+            <h3>Label<span style="font-weight:300;">Kit</span></h3>
+        </div>
+        <div class="nav-menu">
+            <a href="{{ url_for('project_dashboard', project_id=image.project_id) }}" class="nav-item">
+                <i class="fas fa-chalkboard-user"></i><span>Главная</span>
+            </a>
+            <a href="{{ url_for('project_users_list', project_id=image.project_id) }}" class="nav-item">
+                <i class="fas fa-users"></i><span>Участники</span>
+            </a>
+            <a href="{{ url_for('project_media', project_id=image.project_id) }}" class="nav-item">
+                <i class="fas fa-photo-video"></i><span>Media</span>
+            </a>
+            <div class="nav-item active">
+                <i class="fas fa-draw-polygon"></i><span>Разметка</span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <a href="{{ url_for('logout') }}" class="nav-item" style="text-decoration:none;">
+                <i class="fas fa-sign-out-alt"></i><span>Выйти</span>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Основной контент -->
+    <main class="main-content">
+        <div class="top-bar">
+            <div>
+                <h2><i class="fas fa-draw-polygon" style="color:#3b6cf6;"></i> {{ image.filename }}</h2>
+                <div class="breadcrumb">
+                    <a href="{{ url_for('project_media', project_id=image.project_id) }}" style="color:#7a8aa8;">← Вернуться к списку</a>
+                </div>
+            </div>
+            <div class="user-info">
+                <span style="font-size:0.8rem; background:#eef2f9; padding:2px 10px; border-radius:20px;">
+                    <i class="fas fa-tag"></i> <span id="annCount">0</span> аннотаций
+                </span>
+                <div class="user-avatar">{{ current_user.username[:2] }}</div>
+                <span style="font-size:0.85rem; font-weight:500;">{{ current_user.username }}</span>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <!-- Canvas-зона -->
+            <div class="canvas-area">
+                <div class="canvas-toolbar">
+                    <button class="tool-btn active" id="toolRect" onclick="setTool('rect')">
+                        <i class="fas fa-vector-square"></i> Прямоугольник
+                    </button>
+                    <div class="divider"></div>
+                    <button class="tool-btn" id="btnUndo" onclick="undoLast()">
+                        <i class="fas fa-undo-alt"></i> Отмена
+                    </button>
+                    <button class="tool-btn danger" id="btnClear" onclick="clearAll()">
+                        <i class="fas fa-trash-alt"></i> Очистить
+                    </button>
+                    <div class="divider"></div>
+                    <button class="tool-btn" onclick="changeZoom(-0.1)"><i class="fas fa-search-minus"></i></button>
+                    <button class="tool-btn" onclick="changeZoom(0.1)"><i class="fas fa-search-plus"></i></button>
+                    <button class="tool-btn" onclick="resetZoom()"><i class="fas fa-compress-alt"></i> Сброс</button>
+                    <span class="zoom-info" id="zoomLabel">100%</span>
+                </div>
+
+                <div class="canvas-wrapper" id="canvasWrapper">
+                    <canvas id="annotationCanvas"></canvas>
+                </div>
+
+                <div class="status-bar">
+                    <span>X: <span id="curX">0</span></span>
+                    <span>Y: <span id="curY">0</span></span>
+                    <span id="statusMsg">Нарисуйте bbox и выберите метку</span>
+                </div>
+            </div>
+
+            <!-- Правая панель -->
+            <div class="right-panel">
+                <!-- Метки -->
+                <div class="panel-section">
+                    <div class="panel-title"><i class="fas fa-tags"></i> Метка для разметки</div>
+                    <div class="label-input-wrap">
+                        <input type="text" class="label-input" id="newLabelInput" placeholder="Новая метка..." onkeydown="if(event.key==='Enter') addLabel()">
+                        <button class="label-add-btn" onclick="addLabel()"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div class="labels-list" id="labelsList"></div>
+                </div>
+
+                <!-- Список аннотаций -->
+                <div class="panel-title" style="padding: 14px 16px 0; margin-bottom:0;">
+                    <i class="fas fa-list-alt"></i> Аннотации на кадре
+                </div>
+                <div class="annotations-scroll" id="annotationsList">
+                    <div id="noAnnsMsg" style="color:#94a3b8; font-size:0.85rem; text-align:center; margin-top:20px;">
+                        Нет аннотаций. Нарисуйте прямоугольник на изображении.
+                    </div>
+                </div>
+
+                <!-- Сохранение -->
+                <div class="save-section">
+                    <button class="save-btn" id="saveBtn" onclick="saveAnnotations()">
+                        <i class="fas fa-save"></i> Сохранить аннотации
+                    </button>
+                    <div class="nav-btn">
+                        {% if prev_image %}
+                        <a href="{{ url_for('annotate', image_id=prev_image.id) }}">← Предыдущее</a>
+                        {% else %}
+                        <a style="opacity:0.4; pointer-events:none;">← Предыдущее</a>
+                        {% endif %}
+                        {% if next_image %}
+                        <a href="{{ url_for('annotate', image_id=next_image.id) }}">Следующее →</a>
+                        {% else %}
+                        <a style="opacity:0.4; pointer-events:none;">Следующее →</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Данные с сервера ──
+const IMAGE_ID = {{ image.id }};
+const IMAGE_URL = "{{ url_for('static', filename='uploads/' + image.filename) }}";
+const EXISTING_ANNOTATIONS = {{ annotations_json | safe }};
+
+// ── Цвета для меток ──
+const COLORS = [
+    '#3b6cf6','#f97316','#10b981','#a855f7',
+    '#ef4444','#f59e0b','#06b6d4','#84cc16'
+];
+let labelColorMap = {};
+let colorIdx = 0;
+
+function getLabelColor(label) {
+    if (!labelColorMap[label]) {
+        labelColorMap[label] = COLORS[colorIdx % COLORS.length];
+        colorIdx++;
+    }
+    return labelColorMap[label];
+}
+
+// ── Состояние ──
+let annotations = [];   // { x, y, width, height, label }
+let currentLabel = '';
+let tool = 'rect';
+
+// Canvas & изображение
+const canvas = document.getElementById('annotationCanvas');
+const ctx = canvas.getContext('2d');
+const wrapper = document.getElementById('canvasWrapper');
+
+let img = new Image();
+let imgLoaded = false;
+let scale = 1;
+let offsetX = 0, offsetY = 0;
+
+// Рисование bbox
+let isDrawing = false;
+let startX = 0, startY = 0;
+let currentRect = null;
+
+// ── Загрузка изображения ──
+img.onload = function() {
+    imgLoaded = true;
+    fitImageToCanvas();
+    loadExistingAnnotations();
+    render();
+};
+img.src = IMAGE_URL;
+
+function fitImageToCanvas() {
+    const ww = wrapper.clientWidth;
+    const wh = wrapper.clientHeight;
+    const scaleX = ww / img.naturalWidth;
+    const scaleY = wh / img.naturalHeight;
+    scale = Math.min(scaleX, scaleY, 1) * 0.92;
+    canvas.width = img.naturalWidth * scale;
+    canvas.height = img.naturalHeight * scale;
+    offsetX = 0; offsetY = 0;
+    document.getElementById('zoomLabel').textContent = Math.round(scale * 100) + '%';
+}
+
+function loadExistingAnnotations() {
+    EXISTING_ANNOTATIONS.forEach(a => {
+        annotations.push({
+            x: a.x, y: a.y,
+            width: a.width, height: a.height,
+            label: a.label
+        });
+        ensureLabelExists(a.label);
+    });
+    refreshAnnotationsList();
+    updateCount();
+}
+
+// ── Zoom ──
+function changeZoom(delta) {
+    scale = Math.max(0.1, Math.min(5, scale + delta));
+    canvas.width = img.naturalWidth * scale;
+    canvas.height = img.naturalHeight * scale;
+    document.getElementById('zoomLabel').textContent = Math.round(scale * 100) + '%';
+    render();
+}
+
+function resetZoom() { fitImageToCanvas(); render(); }
+
+// ── Рисование ──
+function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (imgLoaded) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+    // Сохранённые аннотации
+    annotations.forEach((a, idx) => {
+        const color = getLabelColor(a.label);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(a.x * scale, a.y * scale, a.width * scale, a.height * scale);
+        // Подпись
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(a.x * scale, a.y * scale - 18, ctx.measureText(a.label).width + 8, 18);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 11px Inter, sans-serif';
+        ctx.fillText(a.label, a.x * scale + 4, a.y * scale - 4);
+    });
+    // Текущий рисуемый bbox
+    if (isDrawing && currentRect) {
+        const color = currentLabel ? getLabelColor(currentLabel) : '#3b6cf6';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 3]);
+        ctx.strokeRect(currentRect.x * scale, currentRect.y * scale, currentRect.w * scale, currentRect.h * scale);
+        ctx.setLineDash([]);
+    }
+}
+
+// ── Canvas события ──
+canvas.addEventListener('mousedown', e => {
+    if (tool !== 'rect') return;
+    isDrawing = true;
+    const pos = getCanvasPos(e);
+    startX = pos.x;
+    startY = pos.y;
+});
+
+canvas.addEventListener('mousemove', e => {
+    const pos = getCanvasPos(e);
+    document.getElementById('curX').textContent = Math.round(pos.x);
+    document.getElementById('curY').textContent = Math.round(pos.y);
+    if (!isDrawing) return;
+    currentRect = normalizeRect(startX, startY, pos.x, pos.y);
+    render();
+});
+
+canvas.addEventListener('mouseup', e => {
+    if (!isDrawing) return;
+    isDrawing = false;
+    const pos = getCanvasPos(e);
+    const rect = normalizeRect(startX, startY, pos.x, pos.y);
+    currentRect = null;
+
+    if (rect.w < 5 || rect.h < 5) { render(); return; }
+
+    if (!currentLabel) {
+        showToast('Выберите метку перед рисованием', 'error');
+        render();
+        return;
+    }
+
+    annotations.push({ x: rect.x, y: rect.y, width: rect.w, height: rect.h, label: currentLabel });
+    refreshAnnotationsList();
+    updateCount();
+    render();
+});
+
+canvas.addEventListener('mouseleave', () => {
+    if (isDrawing) { isDrawing = false; currentRect = null; render(); }
+});
+
+function getCanvasPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (e.clientX - rect.left) / scale,
+        y: (e.clientY - rect.top) / scale
+    };
+}
+
+function normalizeRect(x1, y1, x2, y2) {
+    return {
+        x: Math.min(x1, x2), y: Math.min(y1, y2),
+        w: Math.abs(x2 - x1), h: Math.abs(y2 - y1)
+    };
+}
+
+// ── Инструменты ──
+function setTool(t) {
+    tool = t;
+    document.querySelectorAll('.tool-btn[id^="tool"]').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tool' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.classList.add('active');
+}
+
+function undoLast() {
+    if (annotations.length === 0) return;
+    annotations.pop();
+    refreshAnnotationsList();
+    updateCount();
+    render();
+}
+
+function clearAll() {
+    if (annotations.length === 0) return;
+    if (!confirm('Удалить все аннотации на этом изображении?')) return;
+    annotations = [];
+    refreshAnnotationsList();
+    updateCount();
+    render();
+}
+
+// ── Метки ──
+const DEFAULT_LABELS = ['объект', 'человек', 'автомобиль', 'животное'];
+
+function initLabels() {
+    DEFAULT_LABELS.forEach(l => ensureLabelExists(l));
+    if (DEFAULT_LABELS.length > 0) selectLabel(DEFAULT_LABELS[0]);
+}
+
+function ensureLabelExists(label) {
+    const list = document.getElementById('labelsList');
+    if (document.getElementById('label-' + label)) return;
+    const color = getLabelColor(label);
+    const tag = document.createElement('span');
+    tag.className = 'label-tag';
+    tag.id = 'label-' + label;
+    tag.textContent = label;
+    tag.style.background = color + '22';
+    tag.style.color = color;
+    tag.onclick = () => selectLabel(label);
+    list.appendChild(tag);
+}
+
+function addLabel() {
+    const input = document.getElementById('newLabelInput');
+    const val = input.value.trim();
+    if (!val) return;
+    ensureLabelExists(val);
+    selectLabel(val);
+    input.value = '';
+}
+
+function selectLabel(label) {
+    currentLabel = label;
+    document.querySelectorAll('.label-tag').forEach(t => t.classList.remove('selected'));
+    const el = document.getElementById('label-' + label);
+    if (el) el.classList.add('selected');
+    document.getElementById('statusMsg').textContent = `Метка: ${label} — рисуйте прямоугольник`;
+}
+
+// ── Список аннотаций ──
+function refreshAnnotationsList() {
+    const container = document.getElementById('annotationsList');
+    const noMsg = document.getElementById('noAnnsMsg');
+    container.innerHTML = '';
+
+    if (annotations.length === 0) {
+        container.appendChild(Object.assign(document.createElement('div'), {
+            id: 'noAnnsMsg',
+            style: 'color:#94a3b8; font-size:0.85rem; text-align:center; margin-top:20px;',
+            textContent: 'Нет аннотаций. Нарисуйте прямоугольник на изображении.'
+        }));
+        return;
+    }
+
+    annotations.forEach((a, idx) => {
+        const color = getLabelColor(a.label);
+        const item = document.createElement('div');
+        item.className = 'ann-item';
+        item.style.borderLeftColor = color;
+        item.innerHTML = `
+            <div style="flex:1;">
+                <div class="ann-item-label">${escHtml(a.label)}</div>
+                <div class="ann-item-coords">x:${Math.round(a.x)} y:${Math.round(a.y)} ${Math.round(a.width)}×${Math.round(a.height)}</div>
+            </div>
+            <button class="ann-delete" onclick="deleteAnnotation(${idx})" title="Удалить">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function deleteAnnotation(idx) {
+    annotations.splice(idx, 1);
+    refreshAnnotationsList();
+    updateCount();
+    render();
+}
+
+function updateCount() {
+    document.getElementById('annCount').textContent = annotations.length;
+}
+
+// ── Сохранение ──
+async function saveAnnotations() {
+    if (annotations.length === 0) {
+        showToast('Нет аннотаций для сохранения', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+
+    try {
+        const res = await fetch('/save_annotations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image_id: IMAGE_ID,
+                annotations: annotations
+            })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('Аннотации сохранены!', 'success');
+        } else {
+            showToast('Ошибка сохранения', 'error');
+        }
+    } catch (e) {
+        showToast('Ошибка сети', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Сохранить аннотации';
+    }
+}
+
+// ── Вспомогательное ──
+function showToast(msg, type = 'info') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + type;
+    setTimeout(() => { t.className = 'toast'; }, 3000);
+}
+
+function escHtml(str) {
+    return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+}
+
+// ── Бургер ──
+document.getElementById('burgerToggle').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('collapsed');
+});
+
+// ── Resize canvas ──
+window.addEventListener('resize', () => { if (imgLoaded) { fitImageToCanvas(); render(); } });
+
+// ── Инициализация ──
+initLabels();
+</script>
+</body>
+</html>

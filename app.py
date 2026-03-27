@@ -355,66 +355,9 @@ def add_user(project_id):
     return redirect(url_for("project_users_list", project_id=project.id))
 
 
-@app.route('/project/<int:project_id>/remove_user', methods=['POST'])
-@login_required
-def remove_user(project_id):
-
-    project = Project.query.get_or_404(project_id)
-
-    role = get_user_role(current_user, project)
-
-    if role != Role.ADMIN:
-        flash("Нет доступа", "danger")
-        return redirect(url_for("project_users_list", project_id=project.id))
-
-    user_id = request.form.get("user_id")
-
-    if int(user_id) == current_user.id:
-        flash("Нельзя удалить самого себя", "danger")
-        return redirect(url_for("project_users_list", project_id=project.id))
-
-    db.session.execute(
-        user_project.delete().where(
-            (user_project.c.user_id == user_id) &
-            (user_project.c.project_id == project.id)
-        )
-    )
-
-    db.session.commit()
-
-    flash("Пользователь удалён", "success")
-
-    return redirect(url_for("project_users_list", project_id=project.id))
 
 
 
-@app.route('/project/<int:project_id>/change_role', methods=['POST'])
-@login_required
-def change_role(project_id):
-
-    project = Project.query.get_or_404(project_id)
-
-    role = get_user_role(current_user, project)
-
-    if role != Role.ADMIN:
-        flash("Нет доступа", "danger")
-        return redirect(url_for("project_users_list", project_id=project.id))
-
-    user_id = request.form.get("user_id")
-    new_role = request.form.get("role")
-
-    db.session.execute(
-        user_project.update().where(
-            (user_project.c.user_id == user_id) &
-            (user_project.c.project_id == project.id)
-        ).values(role=new_role)
-    )
-
-    db.session.commit()
-
-    flash("Роль обновлена", "success")
-
-    return redirect(url_for("project_users_list", project_id=project.id))
 
 
 # ======== Роут проекта ========
@@ -434,7 +377,8 @@ def project_dashboard(project_id):
     if role == Role.ADMIN:
         users = project.users  # показываем всех пользователей проекта
     else:
-        users = []  # анотаторы видят только себя / минимальные данные
+        #users = []  # анотаторы видят только себя / минимальные данные
+        users = project.users
 
     # ===== Media (изображения проекта) =====
     images = Image.query.filter_by(project_id=project.id).all()
@@ -459,48 +403,12 @@ def project_dashboard(project_id):
 
 
 
-# ======== Загрузка изображения (только админ) ========
-@app.route('/upload_image/<int:project_id>', methods=['POST'])
-@login_required
-@role_required(Role.ADMIN)
-def upload_image(project_id):
-    file = request.files['image']
-    if file:
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        file.save(filepath)
-        img = Image(filename=file.filename, project_id=project_id)
-        db.session.add(img)
-        db.session.commit()
-        flash("Изображение загружено", "success")
-    return redirect(url_for('dashboard'))
-
-# ======== Разметка ========
-@app.route('/annotate/<int:image_id>')
-@login_required
-def annotate(image_id):
-    image = Image.query.get_or_404(image_id)
-    return render_template('annotate.html', image=image)
 
 
-@app.route('/media')
-@login_required
-def media():
 
-    # берём первый проект пользователя
-    project = current_user.projects[0] if current_user.projects else None
 
-    if not project:
-        flash("У вас нет проектов", "warning")
-        return redirect(url_for('dashboard'))
 
-    images = Image.query.filter_by(project_id=project.id).all()
 
-    return render_template(
-        "media.html",
-        images=images,
-        project=project
-    )
 
 @app.route('/save_annotation', methods=['POST'])
 @login_required
@@ -520,23 +428,243 @@ def save_annotation():
     return jsonify({"status":"success"})
 
 
-@app.route('/add_user_to_project', methods=['POST'])
+@app.route('/project/<int:project_id>/add_user_to_project', methods=['POST'])
 @login_required
-@role_required_for_project(Role.ADMIN)
-def add_user_to_project():
+def add_user_to_project(project_id):
+    data = request.get_json()
+    user_id = data.get("user_id")
+    role = data.get("role", Role.ANNOTATOR)
 
-    user_id = request.form.get("user_id")
-    project_id = request.form.get("project_id")
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
 
     user = User.query.get(user_id)
-    project = Project.query.get(project_id)
+    if not user:
+        return jsonify({"success": False, "error": "Пользователь не найден"})
 
-    if user and project:
-        project.users.append(user)
-        db.session.commit()
-        flash("Пользователь добавлен в проект", "success")
+    existing = db.session.execute(
+        user_project.select().where(
+            (user_project.c.user_id == user.id) &
+            (user_project.c.project_id == project.id)
+        )
+    ).first()
+    if existing:
+        return jsonify({"success": False, "error": "Пользователь уже в проекте"})
 
-    return redirect(url_for("dashboard"))
+    db.session.execute(user_project.insert().values(
+        user_id=user.id,
+        project_id=project.id,
+        role=role
+    ))
+    db.session.commit()
+
+    return jsonify({"success": True, "user": {"id": user.id, "username": user.username, "role": role}})
+
+
+@app.route('/project/<int:project_id>/media')
+@login_required
+def project_media(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+    if not role:
+        flash("Нет доступа к проекту", "danger")
+        return redirect(url_for('project_select'))
+
+    images = Image.query.filter_by(project_id=project.id).all()
+
+    total_annotations = sum(len(img.annotations) for img in images)
+    annotated_count = sum(1 for img in images if len(img.annotations) > 0)
+
+    return render_template(
+        "media.html",
+        project=project,
+        images=images,
+        role=role,
+        total_annotations=total_annotations,
+        annotated_count=annotated_count
+    )
+
+
+@app.route('/project/<int:project_id>/upload_image', methods=['POST'])
+@login_required
+def upload_image(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+    if role != Role.ADMIN:
+        flash("Только администратор может загружать изображения", "danger")
+        return redirect(url_for('project_media', project_id=project_id))
+
+    file = request.files.get('image')
+    if not file or file.filename == '':
+        flash("Файл не выбран", "danger")
+        return redirect(url_for('project_media', project_id=project_id))
+
+    # Безопасное имя файла
+    from werkzeug.utils import secure_filename
+    import uuid
+    ext = os.path.splitext(file.filename)[1].lower()
+    allowed = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
+    if ext not in allowed:
+        flash("Неподдерживаемый формат файла", "danger")
+        return redirect(url_for('project_media', project_id=project_id))
+
+    filename = secure_filename(file.filename)
+    # Добавляем uuid чтобы избежать коллизий имён
+    filename = f"{uuid.uuid4().hex}_{filename}"
+
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    img = Image(filename=filename, project_id=project_id)
+    db.session.add(img)
+    db.session.commit()
+
+    flash("Изображение загружено", "success")
+    return redirect(url_for('project_media', project_id=project_id))
+
+
+@app.route('/image/<int:image_id>/delete', methods=['POST'])
+@login_required
+def delete_image(image_id):
+    image = Image.query.get_or_404(image_id)
+    project_id = image.project_id
+
+    role = get_user_role(current_user, image.project)
+    if role != Role.ADMIN:
+        flash("Нет доступа", "danger")
+        return redirect(url_for('project_media', project_id=project_id))
+
+    # Удаляем файл с диска
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    db.session.delete(image)
+    db.session.commit()
+
+    flash("Изображение удалено", "success")
+    return redirect(url_for('project_media', project_id=project_id))
+
+
+@app.route('/annotate/<int:image_id>')
+@login_required
+def annotate(image_id):
+    image = Image.query.get_or_404(image_id)
+
+    role = get_user_role(current_user, image.project)
+    if not role:
+        flash("Нет доступа", "danger")
+        return redirect(url_for('project_select'))
+
+    # Соседние изображения для навигации
+    all_images = Image.query.filter_by(project_id=image.project_id).order_by(Image.id).all()
+    ids = [img.id for img in all_images]
+    idx = ids.index(image_id)
+
+    prev_image = all_images[idx - 1] if idx > 0 else None
+    next_image = all_images[idx + 1] if idx < len(all_images) - 1 else None
+
+    # Существующие аннотации для этого изображения
+    import json
+    annotations_json = json.dumps([
+        {
+            "x": a.x, "y": a.y,
+            "width": a.width, "height": a.height,
+            "label": a.label
+        }
+        for a in image.annotations
+    ])
+
+    return render_template(
+        'annotate.html',
+        image=image,
+        prev_image=prev_image,
+        next_image=next_image,
+        annotations_json=annotations_json
+    )
+
+
+@app.route('/save_annotations', methods=['POST'])
+@login_required
+def save_annotations():
+    data = request.get_json()
+    image_id = data.get('image_id')
+    new_annotations = data.get('annotations', [])
+
+    image = Image.query.get(image_id)
+    if not image:
+        return jsonify({"status": "error", "message": "Изображение не найдено"})
+
+    role = get_user_role(current_user, image.project)
+    if not role:
+        return jsonify({"status": "error", "message": "Нет доступа"})
+
+    # Удаляем старые аннотации этого пользователя для данного изображения
+    Annotation.query.filter_by(image_id=image_id, created_by=current_user.id).delete()
+
+    # Сохраняем новые
+    for a in new_annotations:
+        ann = Annotation(
+            image_id=image_id,
+            x=a.get('x'), y=a.get('y'),
+            width=a.get('width'), height=a.get('height'),
+            label=a.get('label', ''),
+            created_by=current_user.id
+        )
+        db.session.add(ann)
+
+    db.session.commit()
+    return jsonify({"status": "success", "saved": len(new_annotations)})
+
+@app.route('/project/<int:project_id>/remove_user_from_project', methods=['POST'])
+@login_required
+def remove_user_from_project(project_id):
+    data = request.get_json()
+    user_id = data.get("user_id")
+
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    if int(user_id) == current_user.id:
+        return jsonify({"success": False, "error": "Нельзя удалить самого себя"})
+
+    db.session.execute(
+        user_project.delete().where(
+            (user_project.c.user_id == user_id) &
+            (user_project.c.project_id == project_id)
+        )
+    )
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route('/project/<int:project_id>/update_user_role', methods=['POST'])
+@login_required
+def update_user_role(project_id):
+    data = request.get_json()
+    user_id = data.get("user_id")
+    new_role = data.get("role")
+
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    db.session.execute(
+        user_project.update().where(
+            (user_project.c.user_id == user_id) &
+            (user_project.c.project_id == project_id)
+        ).values(role=new_role)
+    )
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 
@@ -546,9 +674,8 @@ def create_default_admin():
     if not admin:
         admin = User(
             username="admin",
-            email="admin",
+            email="admin@admin.com",
             password=generate_password_hash("admin"),
-            role=Role.ADMIN
         )
 
         db.session.add(admin)

@@ -424,9 +424,9 @@
             <h3>Label<span style="font-weight: 300;">Kit</span></h3>
         </div>
         <div class="nav-menu">
-            <a href="{{ url_for('dashboard') }}" class="nav-item" style="text-decoration:none;">
+            <a href="" class="nav-item" style="text-decoration:none;" onclick="event.preventDefault(); window.location.href = window.location.pathname.split('/').slice(0,-1).join('/')">
                 <i class="fas fa-chalkboard-user"></i>
-                <span>Дашборд</span>
+                <span>Главная</span>
             </a>
             <a href="" class="nav-item" style="text-decoration:none; background:#2c2f3f; color:white;">
                 <i class="fas fa-users"></i>
@@ -516,8 +516,8 @@
                             {% if users %}
                                 {% for user in users %}
                                 <tr data-user-id="{{ user.id }}" data-username="{{ user.username }}">
-                                    <td>{{ user.id }}</td>
-                                    <td>{{ user.username }}</td>
+                                    <td>{{ user.user.id }}</td>
+                                    <td>{{ user.user.username }}</td>
                                     <td>
                                         <select class="role-select" data-user-id="{{ user.id }}" id="role-{{ user.id }}">
                                             <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
@@ -613,7 +613,7 @@
         if (!selectEl) return;
         const newRole = selectEl.value;
         // Отправляем POST-запрос на сервер
-        fetch('/update_user_role', {
+        fetch('/project/{{ project.id }}/update_user_role', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -643,7 +643,7 @@
     // Удаление пользователя из проекта
     window.removeUser = function(userId, username) {
         if (!confirm(`Вы действительно хотите удалить пользователя "${username}" из проекта?`)) return;
-        fetch('/remove_user_from_project', {
+        fetch('/project/{{ project.id }}/remove_user_from_project', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -691,7 +691,7 @@
             showFlashMessage('Введите ID пользователя', 'error');
             return;
         }
-        fetch('/add_user_to_project', {
+        fetch('/project/{{ project.id }}/add_user_to_project', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -794,6 +794,8 @@
             return m;
         });
     }
+
+
 </script>
 </body>
 </html>

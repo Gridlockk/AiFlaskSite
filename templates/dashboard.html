@@ -495,11 +495,17 @@
 {% endif %}
 
             <!-- пункты меню: участники, media и др. -->
+
+            <div class="nav-item" onclick="location.href='{{ url_for('project_dashboard', project_id=project.id) }}'">
+                <i class="fas fa-chalkboard-user"></i>
+                <span>Главная</span>
+            </div>
+
             <div class="nav-item" onclick="goToUsers()">
                 <i class="fas fa-users"></i>
                 <span>Участники</span>
             </div>
-            <a href="{{ url_for('media') }}" class="nav-item" style="text-decoration:none;">
+            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item" style="text-decoration:none;">
     <i class="fas fa-photo-video"></i>
     <span>Media</span>
 </a>
@@ -532,13 +538,19 @@
             <div class="project-title">
                 <h2>
     {% if projects %}
-        {{ projects[0].name }}
+        Проект: {{ projects[0].name }}
     {% else %}
         Нет проектов
     {% endif %}
 </h2>
                 <div class="badge">в работе</div>
             </div>
+
+            <div style="background: #f4f7fc; border-radius: 16px; padding: 12px; margin-top: 8px;">
+                    <i class="far fa-calendar-alt" style="margin-right: 6px;"></i>
+                    <span>Дедлайн: 22.04.2026</span>
+                </div>
+
             <div class="user-info">
 
     <span style="font-size:0.9rem; color:#555;">
@@ -630,6 +642,16 @@
 
             <!-- правая информационная панель (участники, media и т.д.) -->
             <div class="info-sidebar">
+
+                <div class="info-header"><i class="fas fa-flag-checkered"></i> <span>Прогресс</span></div>
+                    <div style="background: #edf2f9; border-radius: 100px; height: 10px;">
+                        {% set progress = (total_annotations / total_images * 100) if total_images > 0 else 0 %}
+                        <div style="width: {{ progress }}%; background: #2f4870; height: 10px; border-radius: 100px;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size:0.9rem;">Выполнено: {{ progress|round(0) }}%</span>
+                        <span style="font-size:0.9rem;">Осталось: {{ total_images - total_annotations }}</span>
+                    </div>
                 <!-- блок участники -->
                 <div class="info-block">
                     <div class="info-header">
@@ -662,7 +684,7 @@
                             <i class="fas fa-image"></i>
                         {% endif %}
                         <div class="media-info">
-                            <div>{{ file }}</div>
+                            <div style="text-overflow:ellipsis; white-space:nowrap; max-width:14ch; overflow:hidden;">{{ file }}</div>
                         </div>
                     </div>
                     {% endfor %}
@@ -670,24 +692,9 @@
                     </div>
                 </div>
 
-                <!-- статус задания -->
-                <div class="info-block">
-                    <div class="info-header"><i class="fas fa-flag-checkered"></i> <span>Прогресс</span></div>
-                    <div style="background: #edf2f9; border-radius: 100px; height: 10px;">
-                        {% set progress = (total_annotations / total_images * 100) if total_images > 0 else 0 %}
-                        <div style="width: {{ progress }}%; background: #2f4870; height: 10px; border-radius: 100px;"></div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="font-size:0.9rem;">Выполнено: {{ progress|round(0) }}%</span>
-                        <span style="font-size:0.9rem;">Осталось: {{ total_images - total_annotations }}</span>
-                    </div>
-                </div>
 
-                <!-- мини-календарь / дедлайн -->
-                <div style="background: #f4f7fc; border-radius: 16px; padding: 12px; margin-top: 8px;">
-                    <i class="far fa-calendar-alt" style="margin-right: 6px;"></i>
-                    <span>Дедлайн: 22.04.2026</span>
-                </div>
+
+
             </div>
         </div>
     </main>

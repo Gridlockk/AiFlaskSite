@@ -10,6 +10,18 @@
         body { background: #f2f4f8; height: 100vh; overflow: hidden; }
         .app { display: flex; height: 100vh; }
 
+
+        .export-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 10px;
+    background: #eef2f8; color: #2d4059;
+    font-size: 0.85rem; font-weight: 500;
+    text-decoration: none; transition: 0.2s;
+}
+.export-btn:hover { background: #2d4059; color: white; }
+.export-btn-img { background: #e8f0fe; color: #1a56db; }
+.export-btn-img:hover { background: #1a56db; color: white; }
+
         /* Сайдбар */
         .sidebar {
             background: #1e1f2a; color: #eaeef2; height: 100%;
@@ -263,6 +275,69 @@
         {% endwith %}
 
         <div class="page-body">
+
+            <!-- Экспорт (только для админа) -->
+{% if role == 'admin' %}
+<div style="background:white; border-radius:20px; padding:24px; box-shadow:0 4px 16px rgba(0,0,0,0.04);">
+    <div style="font-weight:600; font-size:1rem; color:#1e293b; margin-bottom:16px;">
+        <i class="fas fa-file-export" style="color:#3b6cf6;"></i> Экспорт аннотаций
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+
+        <!-- Только аннотации -->
+        <div style="flex:1; min-width:200px; background:#f8fafd; border-radius:14px; padding:16px;">
+            <div style="font-size:0.85rem; font-weight:600; color:#5f6c84; margin-bottom:12px;">
+                <i class="fas fa-file-alt"></i> Только аннотации
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='json') }}"
+                   class="export-btn">
+                    <i class="fas fa-brackets-curly"></i> JSON
+                </a>
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='csv') }}"
+                   class="export-btn">
+                    <i class="fas fa-table"></i> CSV
+                </a>
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='coco') }}"
+                   class="export-btn">
+                    <i class="fas fa-shapes"></i> COCO
+                </a>
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='yolo') }}"
+                   class="export-btn">
+                    <i class="fas fa-crosshairs"></i> YOLO
+                </a>
+            </div>
+        </div>
+
+        <!-- Фото + аннотации -->
+        <div style="flex:1; min-width:200px; background:#f8fafd; border-radius:14px; padding:16px;">
+            <div style="font-size:0.85rem; font-weight:600; color:#5f6c84; margin-bottom:12px;">
+                <i class="fas fa-images"></i> Фото + аннотации
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='json', images='true') }}"
+                   class="export-btn export-btn-img">
+                    <i class="fas fa-brackets-curly"></i> JSON + фото
+                </a>
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='csv', images='true') }}"
+                   class="export-btn export-btn-img">
+                    <i class="fas fa-table"></i> CSV + фото
+                </a>
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='coco', images='true') }}"
+                   class="export-btn export-btn-img">
+                    <i class="fas fa-shapes"></i> COCO + фото
+                </a>
+                <a href="{{ url_for('export_annotations', project_id=project.id, format='yolo', images='true') }}"
+                   class="export-btn export-btn-img">
+                    <i class="fas fa-crosshairs"></i> YOLO + фото
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endif %}
+
 
             <!-- Загрузка (только для админа) -->
             {% if role == 'admin' %}

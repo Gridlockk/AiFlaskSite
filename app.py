@@ -404,7 +404,139 @@ def project_dashboard(project_id):
 
 
 
+@app.route('/project/<int:project_id>/export')
+@login_required
+def export_annotations(project_id):
+    import json, csv, io, zipfile
+    from flask import send_file
 
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        flash("Нет доступа", "danger")
+        return redirect(url_for('project_media', project_id=project_id))
+
+    fmt = request.args.get('format', 'json')        # json / csv / coco / yolo
+    include_images = request.args.get('images', 'false') == 'true'
+
+    images = Image.query.filter_by(project_id=project_id).all()
+
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+
+        # ── Фотографии (опционально) ──
+        if include_images:
+            for img in images:
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
+                if os.path.exists(filepath):
+                    zf.write(filepath, f"images/{img.filename}")
+
+        # ── JSON ──
+        if fmt == 'json':
+            data = []
+            for img in images:
+                data.append({
+                    "image_id": img.id,
+                    "filename": img.filename,
+                    "annotations": [
+                        {"x": a.x, "y": a.y, "width": a.width, "height": a.height, "label": a.label}
+                        for a in img.annotations
+                    ]
+                })
+            zf.writestr("annotations.json", json.dumps(data, ensure_ascii=False, indent=2))
+
+        # ── CSV ──
+        elif fmt == 'csv':
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["image_id", "filename", "label", "x", "y", "width", "height"])
+            for img in images:
+                for a in img.annotations:
+                    writer.writerow([img.id, img.filename, a.label, a.x, a.y, a.width, a.height])
+            zf.writestr("annotations.csv", output.getvalue())
+
+        # ── COCO JSON ──
+        elif fmt == 'coco':
+            categories = {}
+            coco_images = []
+            coco_annotations = []
+            ann_id = 1
+
+            for img in images:
+                coco_images.append({
+                    "id": img.id,
+                    "file_name": img.filename,
+                    "width": None,   # можно добавить реальные размеры через Pillow
+                    "height": None
+                })
+                for a in img.annotations:
+                    if a.label not in categories:
+                        categories[a.label] = len(categories) + 1
+                    coco_annotations.append({
+                        "id": ann_id,
+                        "image_id": img.id,
+                        "category_id": categories[a.label],
+                        "bbox": [a.x, a.y, a.width, a.height],  # COCO: [x, y, w, h]
+                        "area": a.width * a.height,
+                        "iscrowd": 0
+                    })
+                    ann_id += 1
+
+            coco = {
+                "images": coco_images,
+                "annotations": coco_annotations,
+                "categories": [{"id": v, "name": k} for k, v in categories.items()]
+            }
+            zf.writestr("annotations_coco.json", json.dumps(coco, ensure_ascii=False, indent=2))
+
+        # ── YOLO TXT ──
+        elif fmt == 'yolo':
+            # Собираем все уникальные метки
+            all_labels = sorted(set(
+                a.label for img in images for a in img.annotations
+            ))
+            label_to_id = {l: i for i, l in enumerate(all_labels)}
+
+            # classes.txt
+            zf.writestr("classes.txt", "\n".join(all_labels))
+
+            for img in images:
+                if not img.annotations:
+                    continue
+
+                # Нужны реальные размеры изображения для нормализации
+                try:
+                    from PIL import Image as PILImage
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
+                    with PILImage.open(filepath) as pil_img:
+                        img_w, img_h = pil_img.size
+                except Exception:
+                    img_w, img_h = 1, 1  # fallback
+
+                lines = []
+                for a in img.annotations:
+                    cls = label_to_id[a.label]
+                    # YOLO: center_x center_y width height (нормализованные 0..1)
+                    cx = (a.x + a.width / 2) / img_w
+                    cy = (a.y + a.height / 2) / img_h
+                    w  = a.width / img_w
+                    h  = a.height / img_h
+                    lines.append(f"{cls} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+
+                # Имя файла без расширения
+                base = os.path.splitext(img.filename)[0]
+                zf.writestr(f"labels/{base}.txt", "\n".join(lines))
+
+    zip_buffer.seek(0)
+    zip_name = f"{project.name}_annotations_{fmt}.zip"
+
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=zip_name
+    )
 
 
 

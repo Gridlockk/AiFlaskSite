@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Инференс · {{ project.name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+        body { background: #f2f4f8; height: 100vh; overflow: hidden; }
+        .app { display: flex; height: 100vh; }
+
+        .sidebar {
+            background: #1e1f2a; color: #eaeef2; height: 100%;
+            width: 260px; transition: width 0.25s ease;
+            overflow: hidden; display: flex; flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.15); flex-shrink: 0;
+        }
+        .sidebar.collapsed { width: 80px; }
+        .sidebar-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px 16px; border-bottom: 1px solid #333544;
+        }
+        .sidebar-header h3 { font-weight: 500; font-size: 1.25rem; color: #fff; white-space: nowrap; }
+        .sidebar.collapsed .sidebar-header h3 { display: none; }
+        .burger-btn {
+            background: none; border: none; color: #b0b9d4; font-size: 1.8rem; cursor: pointer;
+            width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+            border-radius: 8px; transition: background 0.2s;
+        }
+        .burger-btn:hover { background: #2c2f3f; color: white; }
+        .nav-menu { flex: 1; padding: 24px 8px; display: flex; flex-direction: column; gap: 8px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-radius: 12px;
+            color: #b0b9d4; transition: all 0.2s; cursor: pointer; white-space: nowrap; text-decoration: none;
+        }
+        .nav-item i { font-size: 1.5rem; min-width: 32px; text-align: center; }
+        .nav-item span { font-size: 1rem; font-weight: 450; }
+        .nav-item:hover, .nav-item.active { background: #2c2f3f; color: white; }
+        .sidebar.collapsed .nav-item span { display: none; }
+        .sidebar.collapsed .nav-item { justify-content: center; padding: 12px 0; }
+        .sidebar-footer { padding: 20px 8px; border-top: 1px solid #333544; }
+
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+        .top-bar {
+            background: white; padding: 12px 28px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.02); flex-shrink: 0;
+        }
+        .top-bar h2 { font-weight: 600; font-size: 1.3rem; color: #1e293b; }
+        .user-info { display: flex; align-items: center; gap: 12px; color: #2d3a5e; }
+        .user-avatar {
+            background: #3b4b6e; color: white; width: 40px; height: 40px; border-radius: 40px;
+            display: flex; align-items: center; justify-content: center; font-weight: bold;
+        }
+
+        .workspace { flex: 1; display: flex; overflow: hidden; }
+
+        .control-panel {
+            width: 300px; background: white; border-right: 1px solid #e2e8f0;
+            display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+        }
+        .panel-section { padding: 16px; border-bottom: 1px solid #f0f4fa; }
+        .panel-title {
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.6px; color: #5f6c84; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 6px;
+        }
+
+        .model-status {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; background: #f8fafd; border-radius: 10px; margin-bottom: 10px;
+        }
+        .model-dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; flex-shrink: 0; }
+        .model-dot.loaded { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+        .model-dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
+        .model-dot.error { background: #ef4444; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .model-name { font-size: 0.82rem; font-weight: 500; color: #1e293b; }
+        .model-sub { font-size: 0.7rem; color: #7a8aa8; }
+
+        /* Фикс кнопок загрузки */
+        input[type=file] { display: none; }
+        .upload-label {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 14px; border-radius: 10px;
+            border: 2px dashed #c8d3e6; cursor: pointer;
+            font-size: 0.82rem; color: #5f6c84; font-weight: 500;
+            transition: 0.2s; background: #f8fafd; width: 100%; margin-bottom: 8px;
+        }
+        .upload-label:hover { border-color: #3b6cf6; background: #eff4ff; color: #3b6cf6; }
+
+        .btn {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 9px 16px; border-radius: 10px; border: none;
+            font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: 0.2s; width: 100%;
+        }
+        .btn-accent { background: #3b6cf6; color: white; }
+        .btn-accent:hover { background: #2f5de0; }
+        .btn-accent:disabled { background: #94a3b8; cursor: not-allowed; }
+        .btn-green { background: #166534; color: white; }
+        .btn-green:hover { background: #14532d; }
+        .btn-green:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        .source-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+        .source-tab {
+            flex: 1; padding: 7px; border-radius: 8px; border: 1px solid #e2e8f0;
+            background: #f8fafd; color: #5f6c84; font-size: 0.78rem; cursor: pointer;
+            text-align: center; transition: 0.2s;
+        }
+        .source-tab.active { background: #2d4059; color: white; border-color: #2d4059; }
+
+        .dataset-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+        .dataset-item {
+            display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+            background: #f8fafd; border-radius: 8px; cursor: pointer; transition: 0.15s;
+            border: 2px solid transparent;
+        }
+        .dataset-item:hover { background: #eef2f8; }
+        .dataset-item.active { border-color: #3b6cf6; background: #eff4ff; }
+        .dataset-item img { width: 32px; height: 32px; object-fit: cover; border-radius: 5px; background: #1a1e2b; flex-shrink: 0; }
+        .dataset-item-name { font-size: 0.75rem; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+        .dataset-item-badge { font-size: 0.65rem; padding: 2px 5px; border-radius: 8px; background: #d4edda; color: #155724; white-space: nowrap; flex-shrink: 0; }
+
+        .saved-model-item {
+            display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+            background: #f8fafd; border-radius: 8px; cursor: pointer;
+            border: 2px solid transparent; transition: 0.15s; margin-bottom: 5px;
+        }
+        .saved-model-item:hover { border-color: #3b6cf6; background: #eff4ff; }
+        .saved-model-item.active { border-color: #22c55e; background: #f0fdf4; }
+
+        .setting-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .setting-label { font-size: 0.82rem; color: #2d4059; }
+        .setting-val { font-size: 0.82rem; font-weight: 600; color: #1e293b; min-width: 36px; text-align: right; }
+        input[type=range] { width: 100%; margin: 3px 0 10px; accent-color: #3b6cf6; }
+        .hint { font-size: 0.72rem; color: #94a3b8; margin-top: 6px; line-height: 1.4; }
+
+        .canvas-zone { flex: 1; display: flex; flex-direction: column; background: #1a1e2b; overflow: hidden; min-width: 0; }
+        .canvas-topbar {
+            background: #22253a; padding: 8px 16px;
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            border-bottom: 1px solid #333544; flex-shrink: 0;
+        }
+        .canvas-topbar-title { color: #b0b9d4; font-size: 0.85rem; font-weight: 500; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .toggle-btn {
+            display: flex; align-items: center; gap: 5px;
+            padding: 5px 10px; border-radius: 7px; border: 1px solid #3f4a62;
+            background: #2c2f3f; color: #b0b9d4; font-size: 0.75rem; cursor: pointer; transition: 0.2s; white-space: nowrap; flex-shrink: 0;
+        }
+        .toggle-btn.on { background: #1e3a5f; border-color: #3b6cf6; color: #93c5fd; }
+        .toggle-dot { width: 7px; height: 7px; border-radius: 50%; background: #3f4a62; flex-shrink: 0; }
+        .toggle-btn.on .toggle-dot { background: #3b6cf6; }
+
+        .canvas-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+        #inferCanvas { display: block; max-width: 100%; max-height: 100%; }
+        .canvas-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px; color: #3f4a62; }
+        .canvas-placeholder i { font-size: 4rem; }
+
+        .status-bar {
+            background: #22253a; color: #7a8aa8; font-size: 0.72rem;
+            padding: 4px 16px; display: flex; gap: 16px; flex-shrink: 0; flex-wrap: wrap;
+        }
+        .status-bar span b { color: #b0b9d4; }
+
+        .results-panel {
+            width: 260px; background: white; border-left: 1px solid #e2e8f0;
+            display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+        }
+        .results-header { padding: 14px 16px; border-bottom: 1px solid #f0f4fa; font-weight: 600; font-size: 0.9rem; color: #1e293b; }
+        .results-scroll { flex: 1; overflow-y: auto; padding: 10px; }
+        .result-item { background: #f8fafd; border-radius: 9px; padding: 9px 11px; margin-bottom: 7px; border-left: 4px solid #3b6cf6; }
+        .result-label { font-size: 0.88rem; font-weight: 600; color: #1e293b; }
+        .result-conf { font-size: 0.75rem; color: #5f6c84; margin-top: 2px; }
+        .result-coords { font-size: 0.7rem; color: #94a3b8; margin-top: 3px; }
+        .conf-bar { height: 4px; border-radius: 2px; background: #eef2f8; margin-top: 5px; }
+        .conf-fill { height: 100%; border-radius: 2px; }
+
+        .metric-card { background: #f8fafd; border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+        .metric-title { font-size: 0.72rem; font-weight: 600; color: #5f6c84; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+        .metric-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        .metric-name { font-size: 0.8rem; color: #2d4059; }
+        .metric-val { font-size: 0.88rem; font-weight: 700; color: #1e293b; }
+        .metric-val.good { color: #22c55e; }
+        .metric-val.mid { color: #f59e0b; }
+        .metric-val.bad { color: #ef4444; }
+
+        .batch-progress { background: #f8fafd; border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+        .batch-bar-wrap { background: #eef2f8; border-radius: 100px; height: 7px; margin: 7px 0; }
+        .batch-bar { height: 100%; border-radius: 100px; background: #3b6cf6; transition: width 0.3s; }
+        .no-results { color: #94a3b8; font-size: 0.82rem; text-align: center; padding: 28px 0; }
+
+        .toast {
+            position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white;
+            padding: 10px 18px; border-radius: 10px; font-size: 0.88rem; z-index: 1000;
+            transform: translateY(80px); opacity: 0; transition: 0.3s; pointer-events: none;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: #166534; }
+        .toast.error { background: #991b1b; }
+
+        .spinner-overlay {
+            position: absolute; inset: 0; background: rgba(26,30,43,0.75);
+            display: none; align-items: center; justify-content: center; flex-direction: column; gap: 14px; z-index: 10;
+        }
+        .spinner-overlay.show { display: flex; }
+        .spinner { width: 42px; height: 42px; border: 4px solid #3f4a62; border-top-color: #3b6cf6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner-text { color: #b0b9d4; font-size: 0.88rem; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="burger-btn" id="burgerToggle"><i class="fas fa-bars"></i></button>
+            <h3>Label<span style="font-weight:300;">Kit</span></h3>
+        </div>
+        <div class="nav-menu">
+            <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-chalkboard-user"></i><span>Главная</span>
+            </a>
+            <a href="{{ url_for('project_users_list', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-users"></i><span>Участники</span>
+            </a>
+            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-photo-video"></i><span>Media</span>
+            </a>
+            <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item active">
+                <i class="fas fa-robot"></i><span>Инференс</span>
+            </a>
+        </div>
+        <div class="sidebar-footer">
+            <a href="{{ url_for('logout') }}" class="nav-item">
+                <i class="fas fa-sign-out-alt"></i><span>Выйти</span>
+            </a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <h2><i class="fas fa-robot" style="color:#3b6cf6;margin-right:8px;"></i>Инференс · {{ project.name }}</h2>
+            <div class="user-info">
+                <div class="user-avatar">{{ current_user.username[:2] }}</div>
+                <span style="font-size:0.85rem;font-weight:500;">{{ current_user.username }}</span>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div class="control-panel">
+
+                <!-- Модель -->
+                <div class="panel-section">
+                    <div class="panel-title"><i class="fas fa-microchip"></i> Модель</div>
+                    <div class="model-status">
+                        <div class="model-dot" id="modelDot"></div>
+                        <div style="min-width:0;overflow:hidden;">
+                            <div class="model-name" id="modelName">Не загружена</div>
+                            <div class="model-sub" id="modelSub">Загрузите .onnx файл</div>
+                        </div>
+                    </div>
+
+                    {% if models %}
+                    <div style="margin-bottom:10px;">
+                        <div style="font-size:0.72rem;color:#5f6c84;margin-bottom:6px;font-weight:600;">Сохранённые:</div>
+                        {% for m in models %}
+                        <div class="saved-model-item" id="savedModel_{{ m.id }}"
+                             onclick="loadSavedModel('{{ m.filename }}', '{{ m.name }}', {{ m.id }})">
+                            <i class="fas fa-brain" style="color:#6b84b4;font-size:1rem;flex-shrink:0;"></i>
+                            <span style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">{{ m.name }}</span>
+                            <span style="font-size:0.65rem;padding:2px 5px;border-radius:6px;background:#e0e7ff;color:#3730a3;flex-shrink:0;">{{ m.format }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <label class="upload-label" for="modelFileInput">
+                        <i class="fas fa-upload"></i> Загрузить .onnx модель
+                    </label>
+                    <input type="file" id="modelFileInput" accept=".onnx" onchange="uploadAndLoadModel(this)">
+                    <div class="hint" style="text-align:center;"><i class="fas fa-info-circle"></i> Модель работает в браузере — сервер не нагружается</div>
+                </div>
+
+                <!-- Имена классов -->
+                <div class="panel-section">
+                    <div class="panel-title"><i class="fas fa-tags"></i> Имена классов</div>
+                    <textarea id="classNames" rows="3"
+                        placeholder="Одно имя на строку:&#10;person&#10;car&#10;dog"
+                        style="width:100%;padding:8px;border-radius:8px;border:1px solid #e2e8f0;font-size:0.78rem;resize:vertical;font-family:monospace;line-height:1.4;"></textarea>
+                    <div class="hint">Порядок должен совпадать с обучением.</div>
+                    <button onclick="loadCocoNames()"
+                        style="margin-top:6px;width:100%;padding:7px;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafd;font-size:0.78rem;cursor:pointer;">
+                        <i class="fas fa-download"></i> 80 классов COCO (YOLOv5/v8)
+                    </button>
+                </div>
+
+                <!-- Источник -->
+                <div class="panel-section">
+                    <div class="panel-title"><i class="fas fa-image"></i> Источник</div>
+                    <div class="source-tabs">
+                        <div class="source-tab active" id="tabUpload" onclick="switchSource('upload')"><i class="fas fa-upload"></i> Файл</div>
+                        <div class="source-tab" id="tabDataset" onclick="switchSource('dataset')"><i class="fas fa-database"></i> Датасет</div>
+                    </div>
+
+                    <div id="sourceUpload">
+                        <label class="upload-label" for="imageFileInput">
+                            <i class="fas fa-image"></i> Выбрать изображение
+                        </label>
+                        <input type="file" id="imageFileInput" accept="image/*" onchange="loadImageFile(this)">
+                    </div>
+
+                    <div id="sourceDataset" style="display:none;">
+                        <div class="dataset-list">
+                            {% for img in images %}
+                            <div class="dataset-item" id="dsItem_{{ img['id'] }}"
+                                onclick="loadDatasetImage('{{ img['id'] }}', '{{ img['filename'] }}')">
+                                <img src="{{ url_for('static', filename='uploads/' + img['filename']) }}" onerror="this.style.display='none'">
+                                <span class="dataset-item-name">{{ img['filename'] }}</span>
+                                {% if img['annotations']|length > 0 %}
+                                <span class="dataset-item-badge">{{ img['annotations']|length }}</span>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% if not images %}
+                            <div style="color:#94a3b8;font-size:0.8rem;text-align:center;padding:16px 0;">Нет изображений</div>
+                            {% endif %}
+                        </div>
+                        <button class="btn btn-green" id="btnRunAll" onclick="runOnDataset()" style="margin-top:8px;" disabled>
+                            <i class="fas fa-play-circle"></i> Запустить на всём датасете
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Настройки -->
+                <div class="panel-section">
+                    <div class="panel-title"><i class="fas fa-sliders-h"></i> Настройки</div>
+                    <div class="setting-row">
+                        <span class="setting-label">Порог уверенности</span>
+                        <span class="setting-val" id="confVal">0.25</span>
+                    </div>
+                    <input type="range" min="1" max="99" value="25" id="confSlider"
+                           oninput="document.getElementById('confVal').textContent=(this.value/100).toFixed(2)">
+                    <div class="setting-row">
+                        <span class="setting-label">IoU NMS</span>
+                        <span class="setting-val" id="iouVal">0.45</span>
+                    </div>
+                    <input type="range" min="1" max="99" value="45" id="iouSlider"
+                           oninput="document.getElementById('iouVal').textContent=(this.value/100).toFixed(2)">
+                    <div class="setting-row">
+                        <span class="setting-label">Размер входа</span>
+                        <select id="inputSize" style="background:#f8fafd;border:1px solid #e2e8f0;border-radius:7px;padding:3px 7px;font-size:0.8rem;">
+                            <option value="640" selected>640 — YOLOv5/v8</option>
+                            <option value="416">416 — YOLOv3/v4</option>
+                            <option value="320">320 — быстрый</option>
+                        </select>
+                    </div>
+                    <div class="hint"><i class="fas fa-info-circle"></i> Размер на котором обучалась модель. Фото любого размера масштабируется автоматически.</div>
+                </div>
+
+                <div class="panel-section">
+                    <button class="btn btn-accent" id="btnRun" onclick="runInference()" disabled>
+                        <i class="fas fa-bolt"></i> Запустить инференс
+                    </button>
+                </div>
+            </div>
+
+            <!-- Canvas -->
+            <div class="canvas-zone">
+                <div class="canvas-topbar">
+                    <span class="canvas-topbar-title" id="canvasTitle">Изображение не выбрано</span>
+                    <button class="toggle-btn on" id="togglePred" onclick="toggleLayer('pred')">
+                        <div class="toggle-dot"></div> Предсказания
+                    </button>
+                    <button class="toggle-btn on" id="toggleGt" onclick="toggleLayer('gt')">
+                        <div class="toggle-dot"></div> GT аннотации
+                    </button>
+                </div>
+                <div class="canvas-wrapper">
+                    <div class="canvas-placeholder" id="canvasPlaceholder">
+                        <i class="fas fa-robot"></i>
+                        <span>Загрузите модель и выберите изображение</span>
+                    </div>
+                    <canvas id="inferCanvas" style="display:none;"></canvas>
+                    <div class="spinner-overlay" id="spinnerOverlay">
+                        <div class="spinner"></div>
+                        <div class="spinner-text" id="spinnerText">Загрузка...</div>
+                    </div>
+                </div>
+                <div class="status-bar">
+                    <span>Модель: <b id="statusModel">—</b></span>
+                    <span>Файл: <b id="statusImage">—</b></span>
+                    <span>Размер: <b id="statusSize">—</b></span>
+                    <span>Время: <b id="statusTime">—</b></span>
+                    <span>Детекций: <b id="statusDets">—</b></span>
+                </div>
+            </div>
+
+            <!-- Результаты -->
+            <div class="results-panel">
+                <div class="results-header"><i class="fas fa-list-alt" style="color:#3b6cf6;"></i> Результаты</div>
+                <div class="results-scroll" id="resultsScroll">
+                    <div class="no-results"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:8px;"></i>Запустите инференс</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.17.0/ort.min.js"></script>
+<script>
+const PROJECT_ID = {{ project.id }};
+const _imgList = {{ images_json | safe }};
+const DATASET_IMAGES = {};
+_imgList.forEach(img => {
+    img.url = `/static/uploads/${img.filename}`;
+    DATASET_IMAGES[img.id] = img;
+});
+
+// 80 классов COCO
+const COCO_NAMES = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+
+function loadCocoNames() {
+    document.getElementById('classNames').value = COCO_NAMES.join('\n');
+    showToast('80 классов COCO загружены', 'success');
+}
+
+function getClassName(classId) {
+    const raw = document.getElementById('classNames').value.trim();
+    if (!raw) return `class_${classId}`;
+    const names = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    return classId < names.length ? names[classId] : `class_${classId}`;
+}
+
+let ortSession = null, modelLoaded = false;
+let currentImageData = null, lastDetections = [], showPred = true, showGt = true, batchRunning = false;
+
+const COLORS = ['#3b6cf6','#f97316','#10b981','#a855f7','#ef4444','#f59e0b','#06b6d4','#84cc16','#ec4899','#14b8a6'];
+const colorMap = {};
+let colorIdx = 0;
+function getColor(label) {
+    if (!colorMap[label]) colorMap[label] = COLORS[colorIdx++ % COLORS.length];
+    return colorMap[label];
+}
+
+ort.env.wasm.wasmPaths = 'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.17.0/';
+
+async function loadSavedModel(filename, name, modelId) {
+    setModelStatus('loading', name, 'Загрузка...');
+    showSpinner('Загрузка модели...');
+    try {
+        const res = await fetch(`/static/models/${filename}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = await res.arrayBuffer();
+        document.getElementById('spinnerText').textContent = 'Инициализация ONNX...';
+        ortSession = await ort.InferenceSession.create(buf, { executionProviders: ['wasm'] });
+        setModelStatus('loaded', name, `вход: ${ortSession.inputNames[0]}`);
+        document.querySelectorAll('.saved-model-item').forEach(el => el.classList.remove('active'));
+        document.getElementById('savedModel_' + modelId)?.classList.add('active');
+        document.getElementById('btnRun').disabled = !currentImageData;
+        document.getElementById('btnRunAll').disabled = false;
+        showToast(`"${name}" загружена`, 'success');
+    } catch(e) {
+        setModelStatus('error', name, e.message);
+        showToast('Ошибка: ' + e.message, 'error');
+    } finally { hideSpinner(); }
+}
+
+async function uploadAndLoadModel(input) {
+    if (!input.files[0]) return;
+    const file = input.files[0];
+    setModelStatus('loading', file.name, 'Загрузка на сервер...');
+    showSpinner('Отправка файла...');
+    try {
+        const fd = new FormData();
+        fd.append('model', file);
+        const res = await fetch(`/project/${PROJECT_ID}/upload_model`, { method: 'POST', body: fd });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch(e) { throw new Error('Ответ сервера: ' + text.substring(0, 300)); }
+        if (!data.success) throw new Error(data.error || 'Ошибка сервера');
+
+        document.getElementById('spinnerText').textContent = 'Инициализация ONNX...';
+        const buf = await file.arrayBuffer();
+        ortSession = await ort.InferenceSession.create(buf, { executionProviders: ['wasm'] });
+        setModelStatus('loaded', file.name, `вход: ${ortSession.inputNames[0]}`);
+        document.getElementById('btnRun').disabled = !currentImageData;
+        document.getElementById('btnRunAll').disabled = false;
+        showToast('Модель загружена! Обновите страницу чтобы увидеть в списке.', 'success');
+    } catch(e) {
+        setModelStatus('error', file.name, e.message);
+        showToast('Ошибка: ' + e.message, 'error');
+        console.error(e);
+    } finally { hideSpinner(); }
+}
+
+function loadImageFile(input) {
+    if (!input.files[0]) return;
+    const file = input.files[0];
+    currentImageData = { url: URL.createObjectURL(file), filename: file.name, annotations: [] };
+    displayImage(currentImageData.url, file.name);
+    document.getElementById('btnRun').disabled = !ortSession;
+}
+
+function loadDatasetImage(id, filename) {
+    document.querySelectorAll('.dataset-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('dsItem_' + id)?.classList.add('active');
+    const imgData = DATASET_IMAGES[id];
+    if (!imgData) return;
+    currentImageData = { url: imgData.url, filename: imgData.filename, annotations: imgData.annotations || [] };
+    displayImage(imgData.url, imgData.filename);
+    document.getElementById('btnRun').disabled = !ortSession;
+}
+
+function displayImage(url, filename) {
+    const canvas = document.getElementById('inferCanvas');
+    document.getElementById('canvasTitle').textContent = filename;
+    document.getElementById('statusImage').textContent = filename;
+    const img = new Image();
+    img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        canvas.style.display = 'block';
+        document.getElementById('canvasPlaceholder').style.display = 'none';
+        lastDetections = [];
+        document.getElementById('statusSize').textContent = `${img.naturalWidth}×${img.naturalHeight}`;
+        document.getElementById('statusDets').textContent = '—';
+        document.getElementById('statusTime').textContent = '—';
+        document.getElementById('resultsScroll').innerHTML = '<div class="no-results"><i class="fas fa-bolt" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Нажмите «Запустить»</div>';
+    };
+    img.src = url;
+}
+
+async function runInference() {
+    if (!ortSession || !currentImageData) return;
+    const confThr = parseFloat(document.getElementById('confSlider').value) / 100;
+    const iouThr  = parseFloat(document.getElementById('iouSlider').value) / 100;
+    const sz      = parseInt(document.getElementById('inputSize').value);
+
+    showSpinner('Препроцессинг...'); document.getElementById('btnRun').disabled = true;
+    const t0 = performance.now();
+    try {
+        const img = await loadImg(currentImageData.url);
+        const { tensor, sx, sy, px, py } = preprocess(img, sz);
+        document.getElementById('spinnerText').textContent = 'Запуск модели...';
+        const out = (await ortSession.run({ [ortSession.inputNames[0]]: tensor }))[ortSession.outputNames[0]];
+        document.getElementById('spinnerText').textContent = 'Постпроцессинг...';
+        const dets = postprocess(out, confThr, iouThr, sx, sy, px, py, sz, img.naturalWidth, img.naturalHeight);
+        const ms = (performance.now() - t0).toFixed(0);
+        lastDetections = dets;
+        redraw(img, dets, currentImageData.annotations);
+        renderResults(dets, currentImageData.annotations);
+        document.getElementById('statusTime').textContent = ms + ' мс';
+        document.getElementById('statusDets').textContent = dets.length;
+        document.getElementById('statusModel').textContent = document.getElementById('modelName').textContent;
+        showToast(`${dets.length} объектов за ${ms} мс`, 'success');
+    } catch(e) { showToast('Ошибка: ' + e.message, 'error'); console.error(e); }
+    finally { hideSpinner(); document.getElementById('btnRun').disabled = false; }
+}
+
+async function runOnDataset() {
+    if (!ortSession || batchRunning) return;
+    const ids = Object.keys(DATASET_IMAGES);
+    if (!ids.length) { showToast('Нет изображений', 'error'); return; }
+    batchRunning = true; document.getElementById('btnRunAll').disabled = true;
+    const confThr = parseFloat(document.getElementById('confSlider').value) / 100;
+    const iouThr  = parseFloat(document.getElementById('iouSlider').value) / 100;
+    const sz      = parseInt(document.getElementById('inputSize').value);
+    let allTP = 0, allFP = 0, allFN = 0, totalDets = 0;
+    for (let i = 0; i < ids.length; i++) {
+        const d = DATASET_IMAGES[ids[i]];
+        updateBatchProgress(i, ids.length, d.filename);
+        try {
+            const img = await loadImg(d.url);
+            const { tensor, sx, sy, px, py } = preprocess(img, sz);
+            const out = (await ortSession.run({ [ortSession.inputNames[0]]: tensor }))[ortSession.outputNames[0]];
+            const dets = postprocess(out, confThr, iouThr, sx, sy, px, py, sz, img.naturalWidth, img.naturalHeight);
+            totalDets += dets.length;
+            const { tp, fp, fn } = metrics(dets, d.annotations || []);
+            allTP += tp; allFP += fp; allFN += fn;
+            if (i === ids.length - 1) { currentImageData = d; redraw(img, dets, d.annotations || []); canvas.style.display='block'; document.getElementById('canvasPlaceholder').style.display='none'; document.getElementById('canvasTitle').textContent=d.filename; }
+        } catch(e) { console.error(d.filename, e); }
+    }
+    const pr = allTP+allFP>0?allTP/(allTP+allFP):0, rc=allTP+allFN>0?allTP/(allTP+allFN):0, f1=pr+rc>0?2*pr*rc/(pr+rc):0;
+    showBatchMetrics({precision:pr,recall:rc,f1,tp:allTP,fp:allFP,fn:allFN,total:ids.length,totalDets});
+    showToast(`Готово: ${ids.length} фото, ${totalDets} детекций`,'success');
+    batchRunning=false; document.getElementById('btnRunAll').disabled=false;
+}
+
+function preprocess(img, sz) {
+    const c = document.createElement('canvas'); c.width=sz; c.height=sz;
+    const ctx = c.getContext('2d');
+    const scale = Math.min(sz/img.naturalWidth, sz/img.naturalHeight);
+    const nw = Math.round(img.naturalWidth*scale), nh = Math.round(img.naturalHeight*scale);
+    const px = Math.floor((sz-nw)/2), py = Math.floor((sz-nh)/2);
+    ctx.fillStyle='#808080'; ctx.fillRect(0,0,sz,sz);
+    ctx.drawImage(img, px, py, nw, nh);
+    const {data} = ctx.getImageData(0,0,sz,sz);
+    const f = new Float32Array(3*sz*sz);
+    for (let i=0; i<sz*sz; i++) { f[i]=data[i*4]/255; f[i+sz*sz]=data[i*4+1]/255; f[i+2*sz*sz]=data[i*4+2]/255; }
+    return { tensor: new ort.Tensor('float32',f,[1,3,sz,sz]), sx:scale, sy:scale, px, py };
+}
+
+function postprocess(output, confThr, iouThr, sx, sy, px, py, sz, origW, origH) {
+    const data=output.data, dims=output.dims;
+    if (dims.length!==3) return [];
+    const isT = dims[1]<dims[2];
+    const cols = isT?dims[1]:dims[2], anch = isT?dims[2]:dims[1];
+    const dets=[];
+    for (let i=0; i<anch; i++) {
+        let cx,cy,w,h,conf,classId=0;
+        if (isT) {
+            cx=data[0*anch+i]; cy=data[1*anch+i]; w=data[2*anch+i]; h=data[3*anch+i];
+            let mx=-1; for(let c=4;c<cols;c++){const s=data[c*anch+i];if(s>mx){mx=s;classId=c-4;}} conf=mx;
+        } else {
+            const b=i*cols; cx=data[b]; cy=data[b+1]; w=data[b+2]; h=data[b+3];
+            if (cols<=5) { conf=data[b+4]; classId=0; }
+            else if (cols>5&&data[b+4]<=1&&data[b+4]>=0) {
+                // с objectness (YOLOv5)
+                const obj=data[b+4]; let mx=-1;
+                for(let c=5;c<cols;c++){const s=data[b+c];if(s>mx){mx=s;classId=c-5;}} conf=obj*mx;
+            } else {
+                // без objectness (YOLOv8)
+                let mx=-1; for(let c=4;c<cols;c++){const s=data[b+c];if(s>mx){mx=s;classId=c-4;}} conf=mx;
+            }
+        }
+        if (conf<confThr) continue;
+        const x1=Math.max(0,(cx-w/2-px)/sx), y1=Math.max(0,(cy-h/2-py)/sy);
+        const x2=Math.min(origW,(cx+w/2-px)/sx), y2=Math.min(origH,(cy+h/2-py)/sy);
+        if (x2-x1<2||y2-y1<2) continue;
+        dets.push({x:x1,y:y1,width:x2-x1,height:y2-y1,conf,classId,label:getClassName(classId)});
+    }
+    return nms(dets,iouThr);
+}
+
+function nms(dets,thr) {
+    dets.sort((a,b)=>b.conf-a.conf);
+    const keep=[],sup=new Set();
+    for(let i=0;i<dets.length;i++){if(sup.has(i))continue;keep.push(dets[i]);for(let j=i+1;j<dets.length;j++){if(!sup.has(j)&&iou(dets[i],dets[j])>thr)sup.add(j);}}
+    return keep;
+}
+function iou(a,b){const ix1=Math.max(a.x,b.x),iy1=Math.max(a.y,b.y),ix2=Math.min(a.x+a.width,b.x+b.width),iy2=Math.min(a.y+a.height,b.y+b.height);const inter=Math.max(0,ix2-ix1)*Math.max(0,iy2-iy1);const union=a.width*a.height+b.width*b.height-inter;return union>0?inter/union:0;}
+function metrics(preds,gts,thr=0.5){let tp=0,fp=0;const m=new Set();for(const p of preds){let best=0,bi=-1;for(let i=0;i<gts.length;i++){if(m.has(i))continue;const s=iou(p,{x:gts[i].x,y:gts[i].y,width:gts[i].width,height:gts[i].height});if(s>best){best=s;bi=i;}}if(best>=thr&&bi>=0){tp++;m.add(bi);}else fp++;}return{tp,fp,fn:gts.length-m.size};}
+
+function redraw(img, dets, gts=[]) {
+    const canvas=document.getElementById('inferCanvas'), ctx=canvas.getContext('2d');
+    canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
+    ctx.drawImage(img,0,0);
+    // Адаптивный размер шрифта и линий
+    const minSide = Math.min(img.naturalWidth, img.naturalHeight);
+    const fontSize = Math.max(14, Math.round(minSide * 0.02));
+    const lw = Math.max(2, Math.round(minSide * 0.003));
+    const lh = fontSize + 8;
+    ctx.font = `bold ${fontSize}px Inter,sans-serif`;
+
+    if (showGt) {
+        ctx.lineWidth=lw; ctx.setLineDash([fontSize*0.7,fontSize*0.35]);
+        for(const gt of gts){
+            ctx.strokeStyle='#22c55e'; ctx.strokeRect(gt.x,gt.y,gt.width,gt.height);
+            const lbl=gt.label||'GT'; const tw=ctx.measureText(lbl).width;
+            ctx.setLineDash([]);
+            ctx.fillStyle='#22c55e'; ctx.globalAlpha=0.85;
+            ctx.fillRect(gt.x, Math.max(0,gt.y-lh), tw+8, lh);
+            ctx.globalAlpha=1; ctx.fillStyle='white';
+            ctx.fillText(lbl, gt.x+4, Math.max(fontSize,gt.y-5));
+            ctx.setLineDash([fontSize*0.7,fontSize*0.35]);
+        }
+        ctx.setLineDash([]);
+    }
+    if (showPred) {
+        ctx.lineWidth=lw; ctx.setLineDash([]);
+        for(const det of dets){
+            const color=getColor(det.label);
+            ctx.strokeStyle=color; ctx.strokeRect(det.x,det.y,det.width,det.height);
+            const lbl=`${det.label} ${(det.conf*100).toFixed(0)}%`; const tw=ctx.measureText(lbl).width;
+            ctx.fillStyle=color; ctx.globalAlpha=0.88;
+            ctx.fillRect(det.x, Math.max(0,det.y-lh), tw+8, lh);
+            ctx.globalAlpha=1; ctx.fillStyle='white';
+            ctx.fillText(lbl, det.x+4, Math.max(fontSize,det.y-5));
+        }
+    }
+}
+
+function renderResults(dets, gts=[]) {
+    const scroll=document.getElementById('resultsScroll'); let html='';
+    if (gts.length>0&&dets.length>0) {
+        const {tp,fp,fn}=metrics(dets,gts);
+        const pr=tp+fp>0?tp/(tp+fp):0, rc=tp+fn>0?tp/(tp+fn):0, f1=pr+rc>0?2*pr*rc/(pr+rc):0;
+        html+=`<div class="metric-card"><div class="metric-title"><i class="fas fa-chart-bar"></i> Сравнение с GT</div>
+            <div class="metric-row"><span class="metric-name">Precision</span><span class="metric-val ${pr>0.7?'good':pr>0.4?'mid':'bad'}">${(pr*100).toFixed(1)}%</span></div>
+            <div class="metric-row"><span class="metric-name">Recall</span><span class="metric-val ${rc>0.7?'good':rc>0.4?'mid':'bad'}">${(rc*100).toFixed(1)}%</span></div>
+            <div class="metric-row"><span class="metric-name">F1</span><span class="metric-val ${f1>0.7?'good':f1>0.4?'mid':'bad'}">${(f1*100).toFixed(1)}%</span></div>
+            <div class="metric-row"><span class="metric-name">TP/FP/FN</span><span class="metric-val">${tp}/${fp}/${fn}</span></div></div>`;
+    }
+    if (!dets.length) {
+        html+='<div class="no-results"><i class="fas fa-search" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Ничего не найдено<br><small>Понизьте порог уверенности</small></div>';
+    } else {
+        dets.forEach(det=>{
+            const color=getColor(det.label), pct=(det.conf*100).toFixed(1);
+            html+=`<div class="result-item" style="border-left-color:${color}">
+                <div class="result-label">${det.label}</div>
+                <div class="result-conf">${pct}% уверенности</div>
+                <div class="conf-bar"><div class="conf-fill" style="width:${pct}%;background:${color};"></div></div>
+                <div class="result-coords">${Math.round(det.x)},${Math.round(det.y)} · ${Math.round(det.width)}×${Math.round(det.height)}</div>
+            </div>`;
+        });
+    }
+    scroll.innerHTML=html;
+}
+
+function updateBatchProgress(i,total,filename){const pct=Math.round(i/total*100);document.getElementById('resultsScroll').innerHTML=`<div class="batch-progress"><div class="metric-title"><i class="fas fa-tasks"></i> Датасет</div><div style="font-size:0.78rem;color:#5f6c84;margin-bottom:4px;">${i+1}/${total}: ${filename}</div><div class="batch-bar-wrap"><div class="batch-bar" style="width:${pct}%"></div></div><div style="font-size:0.72rem;color:#94a3b8;text-align:right;">${pct}%</div></div>`;}
+function showBatchMetrics({precision,recall,f1,tp,fp,fn,total,totalDets}){document.getElementById('resultsScroll').innerHTML=`<div class="metric-card"><div class="metric-title"><i class="fas fa-chart-pie"></i> Итог по датасету</div><div class="metric-row"><span class="metric-name">Изображений</span><span class="metric-val">${total}</span></div><div class="metric-row"><span class="metric-name">Детекций</span><span class="metric-val">${totalDets}</span></div><div class="metric-row"><span class="metric-name">Precision</span><span class="metric-val ${precision>0.7?'good':precision>0.4?'mid':'bad'}">${(precision*100).toFixed(1)}%</span></div><div class="metric-row"><span class="metric-name">Recall</span><span class="metric-val ${recall>0.7?'good':recall>0.4?'mid':'bad'}">${(recall*100).toFixed(1)}%</span></div><div class="metric-row"><span class="metric-name">F1</span><span class="metric-val ${f1>0.7?'good':f1>0.4?'mid':'bad'}">${(f1*100).toFixed(1)}%</span></div><div class="metric-row"><span class="metric-name">TP/FP/FN</span><span class="metric-val">${tp}/${fp}/${fn}</span></div></div>`;}
+
+function toggleLayer(layer){if(layer==='pred'){showPred=!showPred;document.getElementById('togglePred').classList.toggle('on',showPred);}else{showGt=!showGt;document.getElementById('toggleGt').classList.toggle('on',showGt);}if(currentImageData)loadImg(currentImageData.url).then(img=>redraw(img,lastDetections,currentImageData.annotations||[]));}
+function switchSource(src){document.getElementById('tabUpload').classList.toggle('active',src==='upload');document.getElementById('tabDataset').classList.toggle('active',src==='dataset');document.getElementById('sourceUpload').style.display=src==='upload'?'block':'none';document.getElementById('sourceDataset').style.display=src==='dataset'?'block':'none';}
+function loadImg(url){return new Promise((res,rej)=>{const img=new Image();img.crossOrigin='anonymous';img.onload=()=>res(img);img.onerror=rej;img.src=url;});}
+function setModelStatus(state,name,sub){document.getElementById('modelDot').className='model-dot '+state;document.getElementById('modelName').textContent=name;document.getElementById('modelSub').textContent=sub;modelLoaded=state==='loaded';document.getElementById('statusModel').textContent=modelLoaded?name:'—';}
+function showSpinner(t){document.getElementById('spinnerText').textContent=t;document.getElementById('spinnerOverlay').classList.add('show');}
+function hideSpinner(){document.getElementById('spinnerOverlay').classList.remove('show');}
+function showToast(msg,type=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type||'');setTimeout(()=>t.className='toast',4000);}
+document.getElementById('burgerToggle').addEventListener('click',()=>document.getElementById('sidebar').classList.toggle('collapsed'));
+</script>
+</body>
+</html>

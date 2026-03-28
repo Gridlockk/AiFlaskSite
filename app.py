@@ -10,6 +10,7 @@ app.config['SECRET_KEY'] = 'supersecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MODELS_FOLDER'] = 'static/models'
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -27,6 +28,113 @@ user_project = db.Table('user_project',
     db.Column('role', db.String(20), default=Role.ANNOTATOR)
 )
 
+
+class Model(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)  # оригинальное имя файла
+    filename = db.Column(db.String(200), nullable=False)  # uuid_name.onnx
+    format = db.Column(db.String(20), default='onnx')
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=db.func.now())
+
+    def __repr__(self):
+        return f"<Model {self.name}>"
+
+
+@app.route('/project/<int:project_id>/inference')
+@login_required
+def project_inference(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+    if not role:
+        flash("Нет доступа к проекту", "danger")
+        return redirect(url_for('project_select'))
+
+    if role != Role.ADMIN:
+        flash("Инференс доступен только администратору", "danger")
+        return redirect(url_for('project_dashboard', project_id=project_id))
+
+    raw_images = Image.query.filter_by(project_id=project_id).all()
+
+    images = []
+    for img in raw_images:
+        images.append({
+            "id": img.id,
+            "filename": img.filename,
+            "annotations": [
+                {
+                    "x": a.x, "y": a.y,
+                    "width": a.width, "height": a.height,
+                    "label": a.label
+                }
+                for a in img.annotations
+            ]
+        })
+
+    # ← теперь вне цикла
+    models = Model.query.filter_by(project_id=project_id).order_by(Model.created_at.desc()).all()
+
+    import json
+    images_json = json.dumps(images)
+
+    return render_template(
+        'inference.html',
+        project=project,
+        images=images,
+        images_json=images_json,
+        models=models,
+        role=role
+    )
+
+@app.route('/project/<int:project_id>/upload_model', methods=['POST'])
+@login_required
+def upload_model(project_id):
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    file = request.files.get('model')
+    if not file or file.filename == '':
+        return jsonify({"success": False, "error": "Файл не выбран"})
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in {'.onnx'}:
+        return jsonify({"success": False, "error": "Поддерживается только .onnx"})
+
+    from werkzeug.utils import secure_filename
+    import uuid
+
+    original_name = secure_filename(file.filename)
+    filename = f"{uuid.uuid4().hex}_{original_name}"
+
+    os.makedirs(app.config['MODELS_FOLDER'], exist_ok=True)
+    filepath = os.path.join(app.config['MODELS_FOLDER'], filename)
+    file.save(filepath)
+
+    # Сохраняем в БД
+    model = Model(
+        name=original_name,
+        filename=filename,
+        format='onnx',
+        project_id=project_id,
+        uploaded_by=current_user.id
+    )
+    db.session.add(model)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "model": {
+            "id": model.id,
+            "name": model.name,
+            "filename": model.filename
+        }
+    })
+
+
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
@@ -35,6 +143,27 @@ class User(db.Model, UserMixin):
     team = db.Column(db.String(100), default="Моя команда")
     projects = db.relationship('Project', secondary=user_project, back_populates='users')
     annotations = db.relationship('Annotation', backref='creator', lazy=True)
+
+
+@app.route('/project/<int:project_id>/delete_model/<int:model_id>', methods=['POST'])
+@login_required
+def delete_model(project_id, model_id):
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    model = Model.query.get_or_404(model_id)
+
+    filepath = os.path.join(app.config['MODELS_FOLDER'], model.filename)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    db.session.delete(model)
+    db.session.commit()
+
+    return jsonify({"success": True})
+
 
 class Project(db.Model):
 

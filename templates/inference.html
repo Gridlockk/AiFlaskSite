@@ -67,6 +67,11 @@
             display: flex; align-items: center; gap: 6px;
         }
 
+        #inferCanvas {
+    transform-origin: center center;
+    transition: transform 0.05s;
+}
+
         .model-status {
             display: flex; align-items: center; gap: 10px;
             padding: 10px 12px; background: #f8fafd; border-radius: 10px; margin-bottom: 10px;
@@ -409,6 +414,18 @@
 <div class="toast" id="toast"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.17.0/ort.min.js"></script>
 <script>
+    let zoom = 1;
+let IMAGE_RESULTS = {};
+
+let ortSession = null;
+let modelLoaded = false;
+let currentImageData = null;
+let lastDetections = [];
+let showPred = true;
+let showGt = true;
+let batchRunning = false;
+
+
 const PROJECT_ID = {{ project.id }};
 const _imgList = {{ images_json | safe }};
 const DATASET_IMAGES = {};
@@ -432,8 +449,6 @@ function getClassName(classId) {
     return classId < names.length ? names[classId] : `class_${classId}`;
 }
 
-let ortSession = null, modelLoaded = false;
-let currentImageData = null, lastDetections = [], showPred = true, showGt = true, batchRunning = false;
 
 const COLORS = ['#3b6cf6','#f97316','#10b981','#a855f7','#ef4444','#f59e0b','#06b6d4','#84cc16','#ec4899','#14b8a6'];
 const colorMap = {};
@@ -503,17 +518,62 @@ function loadImageFile(input) {
 }
 
 function loadDatasetImage(id, filename) {
-    document.querySelectorAll('.dataset-item').forEach(el => el.classList.remove('active'));
+
+    document.querySelectorAll('.dataset-item')
+        .forEach(el => el.classList.remove('active'));
+
     document.getElementById('dsItem_' + id)?.classList.add('active');
+
     const imgData = DATASET_IMAGES[id];
     if (!imgData) return;
-    currentImageData = { url: imgData.url, filename: imgData.filename, annotations: imgData.annotations || [] };
+
+    currentImageData = {
+        url: imgData.url,
+        filename: imgData.filename,
+        annotations: imgData.annotations || []
+    };
+
     displayImage(imgData.url, imgData.filename);
+
     document.getElementById('btnRun').disabled = !ortSession;
+
+    // если результат уже есть — показываем его
+    const saved = IMAGE_RESULTS[imgData.filename];
+
+    if (saved) {
+
+        lastDetections = saved;
+
+        loadImg(imgData.url).then(img => {
+            redraw(img, saved, currentImageData.annotations);
+            renderResults(saved, currentImageData.annotations);
+        });
+
+    }
 }
 
 function displayImage(url, filename) {
     const canvas = document.getElementById('inferCanvas');
+
+    if (!canvas.dataset.zoomInit) {
+
+    canvas.addEventListener('wheel', e => {
+
+        e.preventDefault();
+
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+
+        zoom += delta;
+
+        if (zoom < 0.2) zoom = 0.2;
+        if (zoom > 5) zoom = 5;
+
+        canvas.style.transform = `scale(${zoom})`;
+    });
+
+    canvas.dataset.zoomInit = "1";
+}
+
     document.getElementById('canvasTitle').textContent = filename;
     document.getElementById('statusImage').textContent = filename;
     const img = new Image();
@@ -549,6 +609,10 @@ async function runInference() {
         const dets = postprocess(out, confThr, iouThr, sx, sy, px, py, sz, img.naturalWidth, img.naturalHeight);
         const ms = (performance.now() - t0).toFixed(0);
         lastDetections = dets;
+        if (currentImageData && currentImageData.id) {
+    IMAGE_RESULTS[currentImageData.id] = dets;
+}
+
         redraw(img, dets, currentImageData.annotations);
         renderResults(dets, currentImageData.annotations);
         document.getElementById('statusTime').textContent = ms + ' мс';

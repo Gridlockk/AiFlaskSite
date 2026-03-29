@@ -444,83 +444,38 @@
         <div class="nav-menu">
 
 
-            {% if current_user.role == "admin" %}
-
-<div style="margin-bottom:20px;">
-
-<form method="POST" action="/create_project">
-
-<input name="name" placeholder="Название проекта" required>
-<input name="description" placeholder="Описание">
-
-<button type="submit">
-<i class="fas fa-plus"></i>
-Создать проект
-</button>
-
-</form>
-
-</div>
-
-{% endif %}
-
-            {% if current_user.role == "admin" %}
-
-<form method="POST" action="/add_user_to_project">
-
-<select name="user_id">
-
-{% for user in users %}
-<option value="{{user.id}}">{{user.username}}</option>
-{% endfor %}
-
-</select>
 
 
-<select name="project_id">
 
-{% for project in projects %}
-<option value="{{project.id}}">{{project.name}}</option>
-{% endfor %}
-
-</select>
-
-
-<button type="submit">
-Добавить в проект
-</button>
-
-</form>
-
-{% endif %}
 
             <!-- пункты меню: участники, media и др. -->
 
-            <div class="nav-item" onclick="location.href='{{ url_for('project_dashboard', project_id=project.id) }}'">
+            <div style="background:#2c2f3f; color:white;" class="nav-item" onclick="location.href='{{ url_for('project_dashboard', project_id=project.id) }}'">
                 <i class="fas fa-chalkboard-user"></i>
                 <span>Главная</span>
             </div>
-
+            {% if role == "admin" %}
             <div class="nav-item" onclick="goToUsers()">
                 <i class="fas fa-users"></i>
                 <span>Участники</span>
             </div>
+
+            <div onclick="location.href='{{ url_for('project_inference', project_id=project.id) }}'" class="nav-item">
+            <i class="fas fas fa-microchip"></i><span>Проверка Модели</span>
+            </div>
+
+            {% endif %}
             <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item" style="text-decoration:none;">
-    <i class="fas fa-photo-video"></i>
-    <span>Media</span>
-</a>
-            <div class="nav-item">
+                <i class="fas fa-photo-video"></i>
+              <span>Медиа</span>
+            </a>
+
+
+            <a href="{{ url_for('project_select') }}" style="text-decoration:none;" class="nav-item">
                 <i class="fas fa-tasks"></i>
-                <span>Задания</span>
-            </div>
-            <div class="nav-item">
-                <i class="fas fa-chart-pie"></i>
-                <span>Дашборд</span>
-            </div>
-            <div class="nav-item">
-                <i class="fas fa-cog"></i>
-                <span>Настройки</span>
-            </div>
+                <span>Выбор проектов</span>
+            </a>
+
         </div>
 
         <div class="sidebar-footer">

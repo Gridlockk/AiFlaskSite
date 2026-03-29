@@ -235,12 +235,23 @@
             <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="nav-item">
                 <i class="fas fa-chalkboard-user"></i><span>Главная</span>
             </a>
+             {% if role == "admin" %}
             <a href="{{ url_for('project_users_list', project_id=project.id) }}" class="nav-item">
                 <i class="fas fa-users"></i><span>Участники</span>
             </a>
-            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item active">
-                <i class="fas fa-photo-video"></i><span>Media</span>
+
+            <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item">
+            <i class="fas fas fa-microchip"></i><span>Проверка модели</span>
             </a>
+            {% endif %}
+            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item active">
+                <i class="fas fa-photo-video"></i><span>Медиа</span>
+            </a>
+            <a href="{{ url_for('project_select') }}" class="nav-item ">
+                <i class="fas fa-list-check"></i><span>Выбор проектов</span>
+            </a>
+
+
         </div>
         <div class="sidebar-footer">
             <a href="{{ url_for('logout') }}" class="nav-item" style="text-decoration:none;">

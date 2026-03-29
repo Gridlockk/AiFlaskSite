@@ -800,6 +800,9 @@ def delete_image(image_id):
         flash("Нет доступа", "danger")
         return redirect(url_for('project_media', project_id=project_id))
 
+    # Сначала удаляем аннотации вручную
+    Annotation.query.filter_by(image_id=image_id).delete()
+
     # Удаляем файл с диска
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
     if os.path.exists(filepath):
@@ -917,6 +920,8 @@ def update_user_role(project_id):
 
     if get_user_role(current_user, project) != Role.ADMIN:
         return jsonify({"success": False, "error": "Нет доступа"})
+    if int(user_id) == current_user.id:
+        return jsonify({"success": False, "error": "Нельзя изменить свою роль"})
 
     db.session.execute(
         user_project.update().where(

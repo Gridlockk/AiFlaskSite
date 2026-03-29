@@ -228,12 +228,17 @@
             <a href="{{ url_for('project_users_list', project_id=project.id) }}" class="nav-item">
                 <i class="fas fa-users"></i><span>Участники</span>
             </a>
-            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
-                <i class="fas fa-photo-video"></i><span>Media</span>
-            </a>
             <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item active">
-                <i class="fas fa-robot"></i><span>Инференс</span>
+                <i class="fas fas fas fa-microchip"></i><span>Проверка модели</span>
             </a>
+            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-photo-video"></i><span>Медиа</span>
+            </a>
+            <a class="nav-item">
+                <i class="fas fa-tasks"></i>
+                <span>Выбор проектов</span>
+            </a>
+
         </div>
         <div class="sidebar-footer">
             <a href="{{ url_for('logout') }}" class="nav-item">

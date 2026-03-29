@@ -432,22 +432,21 @@
                 <i class="fas fa-users"></i>
                 <span>Участники</span>
             </a>
+
+
+
+             <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item">
+            <i class="fas fas fa-microchip"></i><span>Проверка Модели</span>
+            </a>
+
             <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item" style="text-decoration:none;">
                 <i class="fas fa-photo-video"></i>
-                <span>Media</span>
+                <span>Медиа</span>
             </a>
-            <div class="nav-item" onclick="alert('Страница заданий')">
-                <i class="fas fa-tasks"></i>
-                <span>Задания</span>
-            </div>
-            <div class="nav-item" onclick="alert('Аналитика')">
-                <i class="fas fa-chart-pie"></i>
-                <span>Дашборд</span>
-            </div>
-            <div class="nav-item" onclick="alert('Настройки')">
-                <i class="fas fa-cog"></i>
-                <span>Настройки</span>
-            </div>
+            <a href="{{ url_for('project_select') }}" class="nav-item ">
+                <i class="fas fa-list-check"></i><span>Выбор проектов</span>
+            </a>
+
         </div>
         <div class="sidebar-footer">
             <a href="{{ url_for('logout') }}" class="nav-item" style="text-decoration:none;">
@@ -515,25 +514,41 @@
                         <tbody>
                             {% if users %}
                                 {% for user in users %}
-                                <tr data-user-id="{{ user.id }}" data-username="{{ user.username }}">
-                                    <td>{{ user.user.id }}</td>
-                                    <td>{{ user.user.username }}</td>
-                                    <td>
-                                        <select class="role-select" data-user-id="{{ user.id }}" id="role-{{ user.id }}">
-                                            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
-                                            <option value="annotator" {% if user.role == 'annotator' %}selected{% endif %}>Annotator</option>
-                                        </select>
-                                    </td>
-                                    <td class="action-buttons">
-                                        <button class="btn-update" onclick="updateRole({{ user.id }})">
-                                            <i class="fas fa-save"></i> Изменить
-                                        </button>
-                                        <button class="btn-icon btn-danger" onclick="removeUser({{ user.id }}, '{{ user.username }}')">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
+<tr data-user-id="{{ user.user.id }}">
+    <td>{{ user.user.id }}</td>
+    <td>
+        {{ user.user.username }}
+        {% if user.user.id == current_user.id %}
+        <span style="font-size:0.72rem;background:#eef2f8;color:#5f6c84;padding:2px 7px;border-radius:10px;margin-left:6px;">вы</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if user.user.id == current_user.id %}
+        <!-- Себя не меняем — просто текст -->
+        <span style="padding:6px 12px;background:#f1f4f9;border-radius:30px;font-size:0.85rem;color:#5f6c84;">
+            {{ user.role }}
+        </span>
+        {% else %}
+        <select class="role-select"
+                id="role-{{ user.user.id }}"
+                data-original="{{ user.role }}"
+                onchange="updateRole({{ user.user.id }})">
+            <option value="admin"     {% if user.role == 'admin'     %}selected{% endif %}>Admin</option>
+            <option value="annotator" {% if user.role == 'annotator' %}selected{% endif %}>Annotator</option>
+        </select>
+        {% endif %}
+    </td>
+    <td class="action-buttons">
+        {% if user.user.id != current_user.id %}
+        <button class="btn-icon btn-danger" onclick="removeUser({{ user.user.id }}, '{{ user.user.username }}')">
+            <i class="fas fa-trash-alt"></i>
+        </button>
+        {% else %}
+        <span style="font-size:0.75rem;color:#94a3b8;">—</span>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
                             {% else %}
                                 <tr>
                                     <td colspan="4" style="text-align:center; padding: 40px;">Нет участников в этом проекте</td>

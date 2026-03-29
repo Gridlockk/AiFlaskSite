@@ -421,6 +421,7 @@ let ortSession = null;
 let modelLoaded = false;
 let currentImageData = null;
 let lastDetections = [];
+let hiddenDets = new Set();
 let showPred = true;
 let showGt = true;
 let batchRunning = false;
@@ -436,6 +437,65 @@ _imgList.forEach(img => {
 
 // 80 классов COCO
 const COCO_NAMES = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat','traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase','frisbee','skis','snowboard','sports ball','kite','baseball bat','baseball glove','skateboard','surfboard','tennis racket','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator','book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+
+
+function toggleDet(idx) {
+    if (hiddenDets.has(idx)) {
+        hiddenDets.delete(idx);
+    } else {
+        hiddenDets.add(idx);
+    }
+
+    // Обновить иконку и стиль карточки
+    const card = document.getElementById('detCard_' + idx);
+    const eye  = document.getElementById('detEye_' + idx);
+    const dot  = document.getElementById('detDot_' + idx);
+
+    const hidden = hiddenDets.has(idx);
+    card.style.opacity = hidden ? '0.4' : '1';
+    eye.innerHTML = hidden ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+
+    // Обновить счётчик
+    const total = lastDetections.length;
+    const visible = total - hiddenDets.size;
+    const counter = document.getElementById('visibleCount');
+    if (counter) counter.textContent = visible;
+
+    // Перерисовать canvas только с видимыми
+    if (currentImageData) {
+        loadImg(currentImageData.url).then(img => {
+            const visibleDets = lastDetections.filter((_, i) => !hiddenDets.has(i));
+            redraw(img, visibleDets, currentImageData.annotations || []);
+        });
+    }
+}
+
+let _allHidden = false;
+function toggleAllDets(total) {
+    _allHidden = !_allHidden;
+    hiddenDets = _allHidden ? new Set([...Array(total).keys()]) : new Set();
+
+    // Обновить все карточки
+    for (let i = 0; i < total; i++) {
+        const card = document.getElementById('detCard_' + i);
+        const eye  = document.getElementById('detEye_' + i);
+        if (card) card.style.opacity = _allHidden ? '0.4' : '1';
+        if (eye)  eye.innerHTML = _allHidden ? '<i class="fas fa-eye-slash"></i>' : '<i class="fas fa-eye"></i>';
+    }
+
+    const counter = document.getElementById('visibleCount');
+    if (counter) counter.textContent = _allHidden ? 0 : total;
+
+    const btn = document.querySelector('[onclick^="toggleAllDets"]');
+    if (btn) btn.textContent = _allHidden ? 'Показать все' : 'Скрыть все';
+
+    if (currentImageData) {
+        loadImg(currentImageData.url).then(img => {
+            const visibleDets = _allHidden ? [] : lastDetections;
+            redraw(img, visibleDets, currentImageData.annotations || []);
+        });
+    }
+}
 
 function loadCocoNames() {
     document.getElementById('classNames').value = COCO_NAMES.join('\n');
@@ -593,6 +653,10 @@ function displayImage(url, filename) {
 }
 
 async function runInference() {
+
+hiddenDets = new Set();
+_allHidden = false;
+
     if (!ortSession || !currentImageData) return;
     const confThr = parseFloat(document.getElementById('confSlider').value) / 100;
     const iouThr  = parseFloat(document.getElementById('iouSlider').value) / 100;
@@ -747,30 +811,52 @@ function redraw(img, dets, gts=[]) {
 }
 
 function renderResults(dets, gts=[]) {
-    const scroll=document.getElementById('resultsScroll'); let html='';
-    if (gts.length>0&&dets.length>0) {
-        const {tp,fp,fn}=metrics(dets,gts);
-        const pr=tp+fp>0?tp/(tp+fp):0, rc=tp+fn>0?tp/(tp+fn):0, f1=pr+rc>0?2*pr*rc/(pr+rc):0;
-        html+=`<div class="metric-card"><div class="metric-title"><i class="fas fa-chart-bar"></i> Сравнение с GT</div>
+    const scroll = document.getElementById('resultsScroll');
+    let html = '';
+
+    if (gts.length > 0 && dets.length > 0) {
+        const {tp,fp,fn} = metrics(dets, gts);
+        const pr = tp+fp>0?tp/(tp+fp):0, rc=tp+fn>0?tp/(tp+fn):0, f1=pr+rc>0?2*pr*rc/(pr+rc):0;
+        html += `<div class="metric-card">
+            <div class="metric-title"><i class="fas fa-chart-bar"></i> Сравнение с GT</div>
             <div class="metric-row"><span class="metric-name">Precision</span><span class="metric-val ${pr>0.7?'good':pr>0.4?'mid':'bad'}">${(pr*100).toFixed(1)}%</span></div>
             <div class="metric-row"><span class="metric-name">Recall</span><span class="metric-val ${rc>0.7?'good':rc>0.4?'mid':'bad'}">${(rc*100).toFixed(1)}%</span></div>
             <div class="metric-row"><span class="metric-name">F1</span><span class="metric-val ${f1>0.7?'good':f1>0.4?'mid':'bad'}">${(f1*100).toFixed(1)}%</span></div>
-            <div class="metric-row"><span class="metric-name">TP/FP/FN</span><span class="metric-val">${tp}/${fp}/${fn}</span></div></div>`;
+            <div class="metric-row"><span class="metric-name">TP/FP/FN</span><span class="metric-val">${tp}/${fp}/${fn}</span></div>
+        </div>`;
     }
+
     if (!dets.length) {
-        html+='<div class="no-results"><i class="fas fa-search" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Ничего не найдено<br><small>Понизьте порог уверенности</small></div>';
+        html += '<div class="no-results"><i class="fas fa-search" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Ничего не найдено<br><small>Понизьте порог уверенности</small></div>';
     } else {
-        dets.forEach(det=>{
-            const color=getColor(det.label), pct=(det.conf*100).toFixed(1);
-            html+=`<div class="result-item" style="border-left-color:${color}">
-                <div class="result-label">${det.label}</div>
+        // Счётчик видимых
+        html += `<div style="font-size:0.72rem;color:#94a3b8;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+            <span>Показано: <b id="visibleCount">${dets.length}</b> из ${dets.length}</span>
+            <button onclick="toggleAllDets(${dets.length})" style="font-size:0.72rem;padding:2px 8px;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafd;cursor:pointer;">
+                Скрыть все
+            </button>
+        </div>`;
+
+        dets.forEach((det, idx) => {
+            const color = getColor(det.label);
+            const pct = (det.conf * 100).toFixed(1);
+            html += `<div class="result-item" id="detCard_${idx}" style="border-left-color:${color};cursor:pointer;" onclick="toggleDet(${idx})">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;" id="detDot_${idx}"></div>
+                    <div class="result-label" style="flex:1;">${det.label}</div>
+                    <div style="font-size:0.72rem;color:#94a3b8;" id="detEye_${idx}"><i class="fas fa-eye"></i></div>
+                </div>
                 <div class="result-conf">${pct}% уверенности</div>
                 <div class="conf-bar"><div class="conf-fill" style="width:${pct}%;background:${color};"></div></div>
                 <div class="result-coords">${Math.round(det.x)},${Math.round(det.y)} · ${Math.round(det.width)}×${Math.round(det.height)}</div>
             </div>`;
         });
     }
-    scroll.innerHTML=html;
+
+    scroll.innerHTML = html;
+
+    // Инициализируем массив видимости
+    hiddenDets = new Set();
 }
 
 function updateBatchProgress(i,total,filename){const pct=Math.round(i/total*100);document.getElementById('resultsScroll').innerHTML=`<div class="batch-progress"><div class="metric-title"><i class="fas fa-tasks"></i> Датасет</div><div style="font-size:0.78rem;color:#5f6c84;margin-bottom:4px;">${i+1}/${total}: ${filename}</div><div class="batch-bar-wrap"><div class="batch-bar" style="width:${pct}%"></div></div><div style="font-size:0.72rem;color:#94a3b8;text-align:right;">${pct}%</div></div>`;}

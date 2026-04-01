@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Разметка · {{ image.filename }}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.17.1/ort.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
@@ -295,6 +296,23 @@
                     <button class="tool-btn danger" id="btnClear" onclick="clearAll()">
                         <i class="fas fa-trash-alt"></i> Очистить
                     </button>
+
+                    <div class="divider"></div>
+                        <select id="modelSelect" class="tool-btn" style="cursor:pointer; min-width:160px; padding-right:8px;">
+                         <option value="">⚙ Модель...</option>
+                        </select>
+                        <div style="display:flex; align-items:center; gap:6px; background:#22253a; border:1px solid #3f4a62; border-radius:8px; padding:4px 10px;">
+                            <label style="color:#7a8aa8; font-size:0.78rem; white-space:nowrap;">Уверенность</label>
+                            <input type="range" id="confSlider" min="1" max="95" value="25"
+                                style="width:80px; accent-color:#3b6cf6; cursor:pointer;"
+                                oninput="document.getElementById('confValue').textContent = this.value + '%'">
+                            <span id="confValue" style="color:#b0b9d4; font-size:0.8rem; min-width:34px;">25%</span>
+                        </div>
+                        <button class="tool-btn" id="btnInference" onclick="runInference()">
+                            <i class="fas fa-robot"></i> Авторазметка
+                        </button>
+
+
                     <div class="divider"></div>
                     <button class="tool-btn" onclick="changeZoom(-0.1)"><i class="fas fa-search-minus"></i></button>
                     <button class="tool-btn" onclick="changeZoom(0.1)"><i class="fas fa-search-plus"></i></button>
@@ -326,9 +344,15 @@
                 </div>
 
                 <!-- Список аннотаций -->
-                <div class="panel-title" style="padding: 14px 16px 0; margin-bottom:0;">
-                    <i class="fas fa-list-alt"></i> Аннотации на кадре
-                </div>
+                <div class="panel-title" style="padding: 14px 16px 0; margin-bottom:0; justify-content:space-between;">
+    <span><i class="fas fa-list-alt"></i> Аннотации на кадре</span>
+    <button onclick="toggleAnnotationsVisibility()" id="btnToggleVis"
+        style="background:none; border:1px solid #e2e8f0; border-radius:6px; padding:3px 9px;
+               font-size:0.75rem; color:#5f6c84; cursor:pointer; display:flex; align-items:center; gap:5px;">
+        <i class="fas fa-eye" id="toggleVisIcon"></i>
+        <span id="toggleVisLabel">Скрыть</span>
+    </button>
+</div>
                 <div class="annotations-scroll" id="annotationsList">
                     <div id="noAnnsMsg" style="color:#94a3b8; font-size:0.85rem; text-align:center; margin-top:20px;">
                         Нет аннотаций. Нарисуйте прямоугольник на изображении.
@@ -436,6 +460,52 @@ function loadExistingAnnotations() {
     updateCount();
 }
 
+let annotationsVisible = true;
+
+function toggleAnnotationsVisibility() {
+    annotationsVisible = !annotationsVisible;
+    document.getElementById('toggleVisIcon').className = annotationsVisible ? 'fas fa-eye' : 'fas fa-eye-slash';
+    document.getElementById('toggleVisLabel').textContent = annotationsVisible ? 'Скрыть' : 'Показать';
+    render();
+}
+
+// ── Редактирование метки аннотации ──
+function startEditLabel(idx) {
+    const span = document.getElementById('label-text-' + idx);
+    if (!span) return;
+    const current = annotations[idx].label;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = current;
+    input.style.cssText = `
+        font-size:0.9rem; font-weight:500; color:#1e293b;
+        border:none; border-bottom:2px solid #3b6cf6;
+        background:transparent; outline:none;
+        width: ${Math.max(80, current.length * 9)}px;
+        padding:0; line-height:1.4;
+    `;
+
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+        const newLabel = input.value.trim() || current;
+        annotations[idx].label = newLabel;
+        ensureLabelExists(newLabel);
+        refreshAnnotationsList();
+        render();
+    }
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { input.value = current; input.blur(); }
+    });
+}
+
+
 // ── Zoom ──
 function changeZoom(delta) {
     scale = Math.max(0.1, Math.min(5, scale + delta));
@@ -453,21 +523,25 @@ function render() {
     if (imgLoaded) {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     }
+
     // Сохранённые аннотации
-    annotations.forEach((a, idx) => {
-        const color = getLabelColor(a.label);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(a.x * scale, a.y * scale, a.width * scale, a.height * scale);
-        // Подпись
-        ctx.fillStyle = color;
-        ctx.globalAlpha = 0.85;
-        ctx.fillRect(a.x * scale, a.y * scale - 18, ctx.measureText(a.label).width + 8, 18);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 11px Inter, sans-serif';
-        ctx.fillText(a.label, a.x * scale + 4, a.y * scale - 4);
-    });
+    if (annotationsVisible) {
+        annotations.forEach((a, idx) => {
+            const color = getLabelColor(a.label);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(a.x * scale, a.y * scale, a.width * scale, a.height * scale);
+            // Подпись
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.85;
+            ctx.fillRect(a.x * scale, a.y * scale - 18, ctx.measureText(a.label).width + 8, 18);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 11px Inter, sans-serif';
+            ctx.fillText(a.label, a.x * scale + 4, a.y * scale - 4);
+        });
+    }
+
     // Текущий рисуемый bbox
     if (isDrawing && currentRect) {
         const color = currentLabel ? getLabelColor(currentLabel) : '#3b6cf6';
@@ -622,14 +696,23 @@ function refreshAnnotationsList() {
         item.className = 'ann-item';
         item.style.borderLeftColor = color;
         item.innerHTML = `
-            <div style="flex:1;">
-                <div class="ann-item-label">${escHtml(a.label)}</div>
-                <div class="ann-item-coords">x:${Math.round(a.x)} y:${Math.round(a.y)} ${Math.round(a.width)}×${Math.round(a.height)}</div>
-            </div>
-            <button class="ann-delete" onclick="deleteAnnotation(${idx})" title="Удалить">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
+    <div style="flex:1;">
+        <div style="display:flex; align-items:center; gap:6px;">
+            <span class="ann-item-label" id="label-text-${idx}"
+                  style="cursor:pointer; border-bottom:1px dashed transparent; transition:0.15s;"
+                  onmouseenter="this.style.borderBottomColor='#94a3b8'"
+                  onmouseleave="this.style.borderBottomColor='transparent'"
+                  onclick="startEditLabel(${idx})"
+                  title="Нажмите для редактирования">${escHtml(a.label)}</span>
+            <i class="fas fa-pen" style="font-size:0.65rem; color:#c0c9d8; cursor:pointer;"
+               onclick="startEditLabel(${idx})" title="Переименовать"></i>
+        </div>
+        <div class="ann-item-coords">x:${Math.round(a.x)} y:${Math.round(a.y)} ${Math.round(a.width)}×${Math.round(a.height)}</div>
+    </div>
+    <button class="ann-delete" onclick="deleteAnnotation(${idx})" title="Удалить">
+        <i class="fas fa-times"></i>
+    </button>
+`;
         container.appendChild(item);
     });
 }
@@ -699,8 +782,223 @@ document.getElementById('burgerToggle').addEventListener('click', () => {
 // ── Resize canvas ──
 window.addEventListener('resize', () => { if (imgLoaded) { fitImageToCanvas(); render(); } });
 
+
+
+
+// ── Авторазметка (onnxruntime-web) ──
+const PROJECT_ID = {{ image.project_id }};
+let ortSession = null;
+let loadedModelId = null;
+
+// Флаг — были ли bbox-ы добавлены моделью в текущей сессии
+let inferenceBoxes = [];   // храним id боксов от последнего прогона
+
+async function loadModels() {
+    try {
+        const res = await fetch(`/project/${PROJECT_ID}/models_list`);
+        const data = await res.json();
+        const sel = document.getElementById('modelSelect');
+
+        if (data.success && data.models.length > 0) {
+            data.models.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.dataset.filename = m.filename;
+                opt.textContent = m.name;
+                sel.appendChild(opt);
+            });
+        } else {
+            sel.innerHTML = '<option value="" disabled>Нет моделей</option>';
+        }
+    } catch(e) {
+        console.warn('Не удалось загрузить список моделей:', e);
+    }
+}
+
+async function getSession(modelId, filename) {
+    if (ortSession && loadedModelId === modelId) return ortSession;
+    showToast('Загрузка модели…');
+    document.getElementById('statusMsg').textContent = 'Загрузка ONNX-модели…';
+    const modelUrl = `/static/models/${filename}`;
+    ortSession = await ort.InferenceSession.create(modelUrl, { executionProviders: ['wasm'] });
+    loadedModelId = modelId;
+    return ortSession;
+}
+
+async function runInference() {
+    const sel = document.getElementById('modelSelect');
+    const modelId = sel.value;
+    const filename = sel.selectedOptions[0]?.dataset?.filename;
+
+    if (!modelId || !filename) {
+        showToast('Выберите модель из списка', 'error');
+        return;
+    }
+
+    // ── Удаляем предыдущие bbox от модели (анти-дублирование) ──
+    if (inferenceBoxes.length > 0) {
+        annotations = annotations.filter(a => !a._fromModel);
+        inferenceBoxes = [];
+    }
+
+    const btn = document.getElementById('btnInference');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Анализ…';
+
+    const confThreshold = parseInt(document.getElementById('confSlider').value) / 100;
+
+    try {
+        const session = await getSession(modelId, filename);
+
+        let modelW = 640, modelH = 640;
+        try {
+            const shape = session.inputMetadata?.[session.inputNames[0]]?.dims;
+            if (shape?.length === 4) {
+                modelH = typeof shape[2] === 'number' ? shape[2] : 640;
+                modelW = typeof shape[3] === 'number' ? shape[3] : 640;
+            }
+        } catch(_) {}
+
+        const offscreen = document.createElement('canvas');
+        offscreen.width  = modelW;
+        offscreen.height = modelH;
+        const offCtx = offscreen.getContext('2d');
+        offCtx.drawImage(img, 0, 0, modelW, modelH);
+        const { data: pixels } = offCtx.getImageData(0, 0, modelW, modelH);
+
+        const tensor = new Float32Array(1 * 3 * modelH * modelW);
+        for (let i = 0; i < modelH * modelW; i++) {
+            tensor[i]                       = pixels[i * 4]     / 255;
+            tensor[i + modelH * modelW]     = pixels[i * 4 + 1] / 255;
+            tensor[i + modelH * modelW * 2] = pixels[i * 4 + 2] / 255;
+        }
+
+        const inputMeta = session.inputNames[0];
+        const inputTensor = new ort.Tensor('float32', tensor, [1, 3, modelH, modelW]);
+        const results = await session.run({ [inputMeta]: inputTensor });
+
+        const outputName = session.outputNames[0];
+        const output = results[outputName];
+        const raw    = output.data;
+        const dims   = output.dims;
+
+        const iouThreshold = 0.45;
+        const origW = img.naturalWidth;
+        const origH = img.naturalHeight;
+
+        let detections = [];
+
+        if (dims.length === 3) {
+            const [, d1, d2] = dims;
+            const isYolov8Style = d1 < d2;
+            const numBoxes = isYolov8Style ? d2 : d1;
+            const numCols  = isYolov8Style ? d1 : d2;
+
+            for (let b = 0; b < numBoxes; b++) {
+                let bx, by, bw, bh, conf, clsId;
+
+                if (isYolov8Style) {
+                    bx = raw[0 * numBoxes + b];
+                    by = raw[1 * numBoxes + b];
+                    bw = raw[2 * numBoxes + b];
+                    bh = raw[3 * numBoxes + b];
+                    let maxScore = -1; clsId = 0;
+                    for (let c = 4; c < numCols; c++) {
+                        const s = raw[c * numBoxes + b];
+                        if (s > maxScore) { maxScore = s; clsId = c - 4; }
+                    }
+                    conf = maxScore;
+                } else {
+                    const off = b * numCols;
+                    bx = raw[off]; by = raw[off+1]; bw = raw[off+2]; bh = raw[off+3];
+                    conf = raw[off+4];
+                    let maxScore = -1; clsId = 0;
+                    for (let c = 5; c < numCols; c++) {
+                        const s = raw[off + c] * conf;
+                        if (s > maxScore) { maxScore = s; clsId = c - 5; }
+                    }
+                    conf = maxScore;
+                }
+
+                if (conf < confThreshold) continue;
+
+                const sx = bx > 1.5 ? origW / modelW : origW;
+                const sy = by > 1.5 ? origH / modelH : origH;
+                const x1 = (bx - bw / 2) * sx;
+                const y1 = (by - bh / 2) * sy;
+                const w  = bw * (bw > 1.5 ? origW / modelW : origW);
+                const h  = bh * (bh > 1.5 ? origH / modelH : origH);
+
+                detections.push({ x: x1, y: y1, width: w, height: h, label: String(clsId), conf });
+            }
+        }
+
+        detections = nms(detections, iouThreshold);
+
+        if (detections.length === 0) {
+            showToast('Модель ничего не обнаружила', 'error');
+            document.getElementById('statusMsg').textContent = 'Объекты не найдены';
+            return;
+        }
+
+        // Добавляем с флагом _fromModel для анти-дублирования
+        detections.forEach(d => {
+            const label = d.label || currentLabel || 'object';
+            ensureLabelExists(label);
+            const box = {
+                x: Math.max(0, d.x),
+                y: Math.max(0, d.y),
+                width:  Math.min(d.width,  origW - Math.max(0, d.x)),
+                height: Math.min(d.height, origH - Math.max(0, d.y)),
+                label,
+                _fromModel: true
+            };
+            annotations.push(box);
+            inferenceBoxes.push(box);
+        });
+
+        refreshAnnotationsList();
+        updateCount();
+        render();
+        showToast(`Добавлено ${detections.length} объектов`, 'success');
+        document.getElementById('statusMsg').textContent = `Авторазметка: ${detections.length} объектов`;
+
+    } catch(e) {
+        console.error(e);
+        showToast('Ошибка: ' + e.message, 'error');
+        document.getElementById('statusMsg').textContent = 'Ошибка авторазметки';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-robot"></i> Авторазметка';
+    }
+}
+
+function nms(boxes, iouThresh) {
+    boxes.sort((a, b) => b.conf - a.conf);
+    const keep = [];
+    const suppressed = new Set();
+    for (let i = 0; i < boxes.length; i++) {
+        if (suppressed.has(i)) continue;
+        keep.push(boxes[i]);
+        for (let j = i + 1; j < boxes.length; j++) {
+            if (!suppressed.has(j) && iou(boxes[i], boxes[j]) > iouThresh)
+                suppressed.add(j);
+        }
+    }
+    return keep;
+}
+
+function iou(a, b) {
+    const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.width,  b.x + b.width);
+    const y2 = Math.min(a.y + a.height, b.y + b.height);
+    const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+    return inter / (a.width * a.height + b.width * b.height - inter);
+}
+
 // ── Инициализация ──
 initLabels();
+loadModels();
 </script>
 </body>
 </html>

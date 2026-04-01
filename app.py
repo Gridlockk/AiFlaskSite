@@ -41,6 +41,32 @@ class Model(db.Model):
     def __repr__(self):
         return f"<Model {self.name}>"
 
+#
+# @app.route('/test')
+# @login_required
+# def project_models_list(project_id):
+#     project = Project.query.get_or_404(project_id)
+#     if not get_user_role(current_user, project):
+#         return jsonify({"success": False, "error": "Нет доступа"})
+#     models = Model.query.filter_by(project_id=project_id).order_by(Model.created_at.desc()).all()
+#     return jsonify({
+#         "success": True,
+#         "models": [{"id": m.id, "name": m.name, "filename": m.filename} for m in models]
+#     })
+
+
+@app.route('/project/<int:project_id>/models_list')
+@login_required
+def project_models_list(project_id):
+    project = Project.query.get_or_404(project_id)
+    if not get_user_role(current_user, project):
+        return jsonify({"success": False, "error": "Нет доступа"})
+    models = Model.query.filter_by(project_id=project_id).order_by(Model.created_at.desc()).all()
+    return jsonify({
+        "success": True,
+        "models": [{"id": m.id, "name": m.name, "filename": m.filename} for m in models]
+    })
+
 
 @app.route('/project/<int:project_id>/inference')
 @login_required
@@ -490,44 +516,44 @@ def add_user(project_id):
 
 
 # ======== Роут проекта ========
-@app.route('/project/<int:project_id>')
-@login_required
-def project_dashboard(project_id):
-    # Получаем проект
-    project = Project.query.get_or_404(project_id)
-
-    # Проверяем, что пользователь участвует в проекте
-    role = get_user_role(current_user, project)
-    if not role:
-        flash("У вас нет доступа к этому проекту", "danger")
-        return redirect(url_for('project_select'))
-
-    # ===== Пользователи =====
-    if role == Role.ADMIN:
-        users = project.users  # показываем всех пользователей проекта
-    else:
-        #users = []  # анотаторы видят только себя / минимальные данные
-        users = project.users
-
-    # ===== Media (изображения проекта) =====
-    images = Image.query.filter_by(project_id=project.id).all()
-
-    # ===== Статистика для проекта =====
-    total_images = len(images)
-    total_annotations = sum(len(img.annotations) for img in images)
-
-    return render_template(
-        "dashboard.html",
-        projects=[project],   # передаём список с одним проектом для совместимости шаблона
-        users=users,
-        media_files=[img.filename for img in images],
-        role=role,
-        project=project,
-        total_images=total_images,
-        total_annotations=total_annotations
-    )
-
-
+# @app.route('/project/<int:project_id>')
+# @login_required
+# def project_dashboard(project_id):
+#     # Получаем проект
+#     project = Project.query.get_or_404(project_id)
+#
+#     # Проверяем, что пользователь участвует в проекте
+#     role = get_user_role(current_user, project)
+#     if not role:
+#         flash("У вас нет доступа к этому проекту", "danger")
+#         return redirect(url_for('project_select'))
+#
+#     # ===== Пользователи =====
+#     if role == Role.ADMIN:
+#         users = project.users  # показываем всех пользователей проекта
+#     else:
+#         #users = []  # анотаторы видят только себя / минимальные данные
+#         users = project.users
+#
+#     # ===== Media (изображения проекта) =====
+#     images = Image.query.filter_by(project_id=project.id).all()
+#
+#     # ===== Статистика для проекта =====
+#     total_images = len(images)
+#     total_annotations = sum(len(img.annotations) for img in images)
+#
+#     return render_template(
+#         "dashboard.html",
+#         projects=[project],   # передаём список с одним проектом для совместимости шаблона
+#         users=users,
+#         media_files=[img.filename for img in images],
+#         role=role,
+#         project=project,
+#         total_images=total_images,
+#         total_annotations=total_annotations
+#     )
+#
+#
 
 
 
@@ -956,6 +982,206 @@ with app.app_context():
     db.create_all()
     create_default_admin()
 
+
+
+#---TEST ROUTE
+
+@app.route('/project/<int:project_id>')
+@login_required
+def project_dashboard(project_id):
+    """Тестовый дашборд с правильной статистикой"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+
+    # Получаем проект
+    project = Project.query.get_or_404(project_id)
+
+    # Проверяем доступ
+    role = get_user_role(current_user, project)
+    if not role:
+        flash("У вас нет доступа к этому проекту", "danger")
+        return redirect(url_for('project_select'))
+
+    # ========== 1. БАЗОВАЯ СТАТИСТИКА ==========
+    images = Image.query.filter_by(project_id=project.id).all()
+    total_images = len(images)
+
+    # СЧИТАЕМ ПРАВИЛЬНО:
+    # - annotated_files - количество файлов, у которых есть хотя бы одна аннотация
+    # - total_annotations - общее количество аннотаций (объектов)
+    annotated_files = 0
+    total_annotations = 0
+    file_annotations_map = {}  # словарь: image_id -> количество аннотаций
+
+    for img in images:
+        ann_count = Annotation.query.filter_by(image_id=img.id).count()
+        total_annotations += ann_count
+        file_annotations_map[img.id] = ann_count
+        if ann_count > 0:
+            annotated_files += 1
+
+    # Процент размеченных файлов (НЕ аннотаций!)
+    annotated_percentage = (annotated_files / total_images * 100) if total_images > 0 else 0
+
+    # Подсчёт типов файлов
+    images_count = sum(1 for img in images if img.filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp')))
+    videos_count = sum(1 for img in images if img.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')))
+
+    # ========== 2. СТАТИСТИКА ПО ПОЛЬЗОВАТЕЛЯМ ==========
+    users = project.users
+
+    # Подготавливаем данные о пользователях с их ролями
+    users_with_roles = []
+    admins_count = 0
+    annotators_count = 0
+    user_annotations_map = {}  # количество АННОТАЦИЙ пользователя
+    user_files_map = {}  # количество ФАЙЛОВ, которые пользователь разметил
+
+    for user in users:
+        user_role = get_user_role(user, project)
+        users_with_roles.append({
+            'user': user,
+            'role': user_role
+        })
+
+        if user_role == Role.ADMIN:
+            admins_count += 1
+        else:
+            annotators_count += 1
+
+        # Считаем аннотации пользователя (объекты)
+        user_ann_count = Annotation.query.filter(
+            Annotation.created_by == user.id,
+            Annotation.image_id.in_([img.id for img in images])
+        ).count()
+        user_annotations_map[user.id] = user_ann_count
+
+        # Считаем количество РАЗНЫХ файлов, которые пользователь разметил
+        user_files = db.session.query(Annotation.image_id).filter(
+            Annotation.created_by == user.id,
+            Annotation.image_id.in_([img.id for img in images])
+        ).distinct().count()
+        user_files_map[user.id] = user_files
+
+    # Количество пользователей, которые сделали хотя бы одну аннотацию
+    active_users = len([u for u in users if user_annotations_map.get(u.id, 0) > 0])
+
+    # ========== 3. ЛЕНТА АКТИВНОСТИ ==========
+    recent_activities = []
+
+    # Последние 5 загруженных изображений
+    recent_images = Image.query.filter_by(project_id=project.id) \
+        .order_by(Image.id.desc()).limit(5).all()
+
+    for img in recent_images:
+        uploader = users[0] if users else None
+        if uploader:
+            recent_activities.append({
+                'user_name': uploader.username,
+                'action': 'загрузил(а) новый файл',
+                'details': img.filename,
+                'icon': 'fa-upload',
+                'time_ago': 'только что'
+            })
+
+    # Последние 5 аннотаций
+    last_annotations = Annotation.query.filter(
+        Annotation.image_id.in_([img.id for img in images])
+    ).order_by(Annotation.id.desc()).limit(5).all()
+
+    for ann in last_annotations:
+        user = User.query.get(ann.created_by)
+        img = Image.query.get(ann.image_id)
+        if user and img:
+            recent_activities.append({
+                'user_name': user.username,
+                'action': f'разметил(а) объект "{ann.label}"',
+                'details': f'на {img.filename}',
+                'icon': 'fa-tag',
+                'time_ago': 'недавно'
+            })
+
+    recent_activities = recent_activities[:10]
+
+    # Последняя активность проекта
+    last_activity_date = '—'
+    if last_annotations:
+        last_activity_date = 'сегодня'
+    elif recent_images:
+        last_activity_date = 'сегодня'
+
+    # ========== 4. ПОСЛЕДНИЕ МЕДИАФАЙЛЫ ==========
+    recent_media = []
+    for img in images[:6]:
+        is_annotated = Annotation.query.filter_by(image_id=img.id).count() > 0
+        ann_count = Annotation.query.filter_by(image_id=img.id).count()
+
+        recent_media.append({
+            'filename': img.filename,
+            'file_type': 'image' if not img.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')) else 'video',
+            'is_annotated': is_annotated,
+            'annotations_count': ann_count,
+            'id': img.id
+        })
+
+    # ========== 5. СТАТИСТИКА ПО МЕТКАМ ==========
+    labels_stats = db.session.query(
+        Annotation.label,
+        func.count(Annotation.id).label('count')
+    ).join(Image, Annotation.image_id == Image.id) \
+        .filter(Image.project_id == project.id) \
+        .group_by(Annotation.label) \
+        .all()
+
+    top_labels = [{'label': l[0] if l[0] else 'без метки', 'count': l[1]} for l in labels_stats[:5]]
+
+    # ========== 6. СТАТИСТИКА ДЛЯ ГРАФИКА (распределение аннотаций по пользователям) ==========
+    user_labels_chart = []
+    for user in users:
+        user_anns = user_annotations_map.get(user.id, 0)
+        if user_anns > 0:
+            user_labels_chart.append({
+                'username': user.username,
+                'count': user_anns
+            })
+    user_labels_chart = sorted(user_labels_chart, key=lambda x: x['count'], reverse=True)[:5]
+
+    # ========== 7. ДАННЫЕ ДЛЯ ШАБЛОНА ==========
+    context = {
+        'project': project,
+        'role': role,
+        'current_user': current_user,
+
+        # Метрики
+        'total_images': total_images,
+        'images_count': images_count,
+        'videos_count': videos_count,
+        'total_annotations': total_annotations,
+        'annotated_files': annotated_files,
+        'annotated_percentage': annotated_percentage,
+        'users_with_roles': users_with_roles,
+        'admins_count': admins_count,
+        'annotators_count': annotators_count,
+        'active_users': active_users,
+
+        # Прогресс пользователей
+        'user_annotations_map': user_annotations_map,
+        'user_files_map': user_files_map,
+
+        # Активность
+        'recent_activities': recent_activities,
+        'last_activity_date': last_activity_date,
+
+        # Медиа
+        'recent_media': recent_media,
+        'file_annotations_map': file_annotations_map,
+
+        # Графики
+        'top_labels': top_labels,
+        'user_labels_chart': user_labels_chart,
+    }
+
+    return render_template("dashboard.html", **context)
 # ======== Запуск ========
 if __name__ == "__main__":
     with app.app_context():  # <-- создаём контекст приложения

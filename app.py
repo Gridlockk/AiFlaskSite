@@ -4,6 +4,9 @@ from flask_login import LoginManager, login_user, login_required, logout_user, c
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import os
+from sqlalchemy import func
+from datetime import datetime
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey'
@@ -983,6 +986,135 @@ with app.app_context():
     create_default_admin()
 
 
+@app.route('/project/<int:project_id>/ai_trainer')
+@login_required
+def ai_trainer(project_id):
+    """Панель управления автоматическим обучением моделей"""
+    project = Project.query.get_or_404(project_id)
+
+    role = get_user_role(current_user, project)
+    if not role or role != Role.ADMIN:
+        flash("Доступ только для администратора проекта", "danger")
+        return redirect(url_for('project_dashboard', project_id=project_id))
+
+    # Получаем все изображения проекта для статистики
+    images = Image.query.filter_by(project_id=project_id).all()
+    total_images = len(images)
+    annotated_images = sum(1 for img in images if Annotation.query.filter_by(image_id=img.id).count() > 0)
+
+    # Получаем ранее обученные модели
+    models = Model.query.filter_by(project_id=project_id).order_by(Model.created_at.desc()).all()
+
+    # Получаем список пользователей для отображения кто отправил
+    users = project.users
+    user_map = {user.id: user.username for user in users}
+
+    # Статистика по классам (меткам)
+    labels = db.session.query(
+        Annotation.label,
+        func.count(Annotation.id).label('count')
+    ).join(Image).filter(Image.project_id == project_id).group_by(Annotation.label).all()
+
+    # Формируем список датасетов (пока один проект, но можно расширить)
+    datasets = [{
+        'id': project.id,
+        'name': project.name,
+        'images_count': total_images,
+        'annotated_count': annotated_images,
+        'labels_count': len(labels),
+        'preview_images': [{'filename': img.filename, 'id': img.id} for img in images[:9]]
+    }]
+
+    return render_template(
+        'ai_trainer.html',
+        project=project,
+        datasets=datasets,
+        models=models,
+        user_map=user_map,
+        role=role,
+        current_user=current_user
+    )
+
+
+# API для отправки датасета на обучение
+@app.route('/project/<int:project_id>/api/train', methods=['POST'])
+@login_required
+def api_start_training(project_id):
+    """Запуск обучения модели на датасете"""
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    data = request.get_json()
+    dataset_id = data.get('dataset_id')
+
+    from datetime import datetime
+
+    # Здесь должна быть реальная логика отправки задачи в очередь
+    # Пока возвращаем успешный ответ с имитацией
+
+    return jsonify({
+        "success": True,
+        "job_id": int(datetime.now().timestamp()),
+        "estimated_seconds": max(300, int(project.image_count / 2) * 60) if hasattr(project, 'image_count') else 600,
+        "message": "Задача поставлена в очередь"
+    })
+
+
+# API для получения статуса сервера и очереди
+@app.route('/project/<int:project_id>/api/trainer_status', methods=['GET'])
+@login_required
+def api_trainer_status(project_id):
+    """Получение статуса сервера обучения и очереди задач"""
+    from datetime import datetime
+    import random
+
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    # Получаем пользователей для маппинга
+    user_map = {user.id: user.username for user in project.users}
+
+    # Формируем историю моделей из БД
+    models_history = []
+    for m in Model.query.filter_by(project_id=project_id).order_by(Model.created_at.desc()).limit(5).all():
+        models_history.append({
+            "id": m.id,
+            "name": m.name,
+            "created_at": m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else "неизвестно",
+            "requested_by": user_map.get(m.uploaded_by, "admin"),
+            "dataset": project.name,
+            "metrics": {"map": 0.82, "loss": 0.18}
+        })
+
+    # Имитация статуса сервера
+    is_busy = random.random() > 0.6
+
+    return jsonify({
+        "success": True,
+        "server": {
+            "online": True,
+            "status": "busy" if is_busy else "idle",
+            "cpu_load": random.randint(15, 85),
+            "gpu_load": random.randint(10, 90),
+            "ram_usage": random.randint(30, 80),
+            "active_jobs": 1 if is_busy else 0
+        },
+        "queue": [
+            {
+                "id": 1,
+                "dataset_name": project.name,
+                "images_count": Image.query.filter_by(project_id=project_id).count(),
+                "requested_by": current_user.username,
+                "position": 1,
+                "estimated_minutes": 8
+            }
+        ] if is_busy else [],
+        "history": models_history
+    })
 
 #---TEST ROUTE
 

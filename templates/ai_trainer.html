@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trainer · {{ project.name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+        body { background: #f1f5f9; height: 100vh; overflow: hidden; }
+        .app { display: flex; height: 100vh; }
+        
+        .sidebar {
+            background-color: #1e1f2a;
+            color: #eaeef2;
+            height: 100%;
+            width: 260px;
+            transition: width 0.25s ease;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.15);
+            flex-shrink: 0;
+        }
+        .sidebar.collapsed { width: 80px; }
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 16px;
+            border-bottom: 1px solid #333544;
+        }
+        .burger-btn {
+            background: none;
+            border: none;
+            color: #b0b9d4;
+            font-size: 1.8rem;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .burger-btn:hover { background-color: #2c2f3f; color: white; }
+        .sidebar-header h3 { font-weight: 500; font-size: 1.25rem; color: #ffffff; white-space: nowrap; }
+        .sidebar.collapsed .sidebar-header h3 { display: none; }
+        .nav-menu {
+            flex: 1;
+            padding: 24px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            color: #b0b9d4;
+            transition: all 0.2s;
+            cursor: pointer;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .nav-item i { font-size: 1.5rem; min-width: 32px; text-align: center; }
+        .nav-item span { font-size: 1rem; font-weight: 450; }
+        .nav-item:hover, .nav-item.active { background-color: #2c2f3f; color: white; }
+        .sidebar.collapsed .nav-item span { display: none; }
+        .sidebar.collapsed .nav-item { justify-content: center; padding: 12px 0; }
+        .sidebar-footer { padding: 20px 8px; border-top: 1px solid #333544; }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            background-color: #f8fafd;
+        }
+        .top-bar {
+            background: white;
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .page-title h2 { font-weight: 600; font-size: 1.5rem; color: #1e293b; }
+        .badge {
+            background-color: #e9ecf3;
+            color: #2d3a5e;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            color: #2d3a5e;
+        }
+        .user-avatar {
+            background-color: #3b4b6e;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .content-padding { padding: 28px 32px; }
+        
+        .server-status-card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 28px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #edf2f7;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+        .server-indicator { display: flex; align-items: center; gap: 16px; }
+        .status-led {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #94a3b8;
+        }
+        .status-led.online { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .status-led.busy { background: #f59e0b; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        
+        .resource-meter {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 12px 18px;
+            min-width: 220px;
+        }
+        .resource-label { font-size: 0.7rem; text-transform: uppercase; color: #5f6c84; margin-bottom: 4px; }
+        .progress-bar-bg {
+            background: #e2e8f0;
+            border-radius: 100px;
+            height: 6px;
+            overflow: hidden;
+            margin: 6px 0;
+        }
+        .progress-fill {
+            background: #2d4059;
+            height: 100%;
+            width: 0%;
+            border-radius: 100px;
+        }
+        
+        .grid-2cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 28px;
+        }
+        @media (max-width: 1000px) { .grid-2cols { grid-template-columns: 1fr; } }
+        
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            border: 1px solid #edf2f7;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+            border-bottom: 1px solid #eef2f6;
+            padding-bottom: 10px;
+        }
+        .card-header h3 { font-size: 1.1rem; font-weight: 600; color: #1e293b; display: flex; align-items: center; gap: 8px; }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #2d4059; color: white; }
+        .btn-primary:hover { background: #1f2b38; }
+        .btn-outline {
+            background: white;
+            border: 1px solid #cbd5e1;
+            color: #1e293b;
+        }
+        .btn-outline:hover { background: #f1f5f9; }
+        
+        .dataset-preview {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 12px;
+            margin: 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .estimation-badge {
+            background: #eef2ff;
+            padding: 6px 12px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            color: #2d4059;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 32px 16px;
+            color: #94a3b8;
+        }
+        
+        .queue-item, .model-history-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f2f6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .badge-queue {
+            background: #fef3c7;
+            color: #b45309;
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 30px;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1e293b;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            z-index: 1000;
+            transform: translateY(80px);
+            opacity: 0;
+            transition: 0.25s;
+            pointer-events: none;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: #166534; }
+        .toast.error { background: #991b1b; }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 28px;
+            max-width: 500px;
+            width: 90%;
+            padding: 24px;
+        }
+        .image-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(3,1fr);
+            gap: 12px;
+            margin: 16px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .thumb {
+            width: 70px;
+            height: 70px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            object-fit: cover;
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="burger-btn" id="burgerToggle"><i class="fas fa-bars"></i></button>
+            <h3>Label<span style="font-weight:300;">Kit</span></h3>
+        </div>
+        <div class="nav-menu">
+            <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-chalkboard-user"></i><span>Главная</span>
+            </a>
+            <a href="{{ url_for('project_users_list', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-users"></i><span>Участники</span>
+            </a>
+            <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-microchip"></i><span>Проверка модели</span>
+            </a>
+            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-photo-video"></i><span>Медиа</span>
+            </a>
+            <div class="nav-item active">
+                <i class="fas fa-brain"></i><span>AI Trainer</span>
+            </div>
+        </div>
+        <div class="sidebar-footer">
+            <a href="{{ url_for('logout') }}" class="nav-item">
+                <i class="fas fa-sign-out-alt"></i><span>Выйти</span>
+            </a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <div class="page-title">
+                <h2><i class="fas fa-microchip"></i> Автоматическое обучение</h2>
+                <div class="badge">Admin · Управление обучением моделей</div>
+            </div>
+            <div class="user-info">
+                <span><i class="fas fa-user-shield"></i> <b>{{ current_user.username }}</b></span>
+                <div class="user-avatar">{{ current_user.username[:2]|upper }}</div>
+            </div>
+        </div>
+
+        <div class="content-padding">
+            <div class="server-status-card" id="serverStatusCard">
+                <div class="server-indicator">
+                    <div class="status-led" id="serverLed"></div>
+                    <div>
+                        <div style="font-weight: 700;" id="serverStateText">Проверка...</div>
+                        <div style="font-size:0.75rem; color:#5f6c84;" id="serverLoadText">загрузка: --%</div>
+                    </div>
+                </div>
+                <div class="resource-meter">
+                    <div class="resource-label"><i class="fas fa-microchip"></i> Вычислительная нагрузка</div>
+                    <div class="progress-bar-bg"><div class="progress-fill" id="cpuFill" style="width:0%"></div></div>
+                </div>
+                <div class="resource-meter">
+                    <div class="resource-label"><i class="fas fa-hourglass-half"></i> Активные задачи</div>
+                    <div style="font-size:1.3rem; font-weight:700;" id="activeJobsCount">0</div>
+                </div>
+            </div>
+
+            <div class="grid-2cols">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-cloud-upload-alt"></i> Отправить датасет</h3>
+                        <span class="badge" id="totalImagesBadge">{{ datasets[0].images_count }} фото</span>
+                    </div>
+                    <div>
+                        <select id="datasetSelect" class="btn-outline" style="width:100%; padding:10px; border-radius:12px;">
+                            {% for ds in datasets %}
+                            <option value="{{ ds.id }}">{{ ds.name }} ({{ ds.images_count }} изображений, {{ ds.labels_count }} классов)</option>
+                            {% endfor %}
+                        </select>
+                        <div class="dataset-preview">
+                            <i class="fas fa-images" style="font-size: 2rem; color:#8b9ac0;"></i>
+                            <div>
+                                <strong>{{ datasets[0].name }}</strong><br>
+                                <span>{{ datasets[0].images_count }}</span> изображений, размечено <span>{{ datasets[0].annotated_count }}</span>
+                            </div>
+                            <button class="btn btn-outline" id="previewDatasetBtn" style="margin-left:auto;"><i class="fas fa-eye"></i> Предпросмотр</button>
+                        </div>
+                        <div class="estimation-badge" style="display:inline-flex; gap:8px; margin-bottom:16px;">
+                            <i class="fas fa-clock"></i> <span id="etaEstimate">Оценка: ~{{ (datasets[0].images_count / 120)|round|int }} мин</span>
+                        </div>
+                        <button id="sendTrainBtn" class="btn btn-primary" style="width:100%;"><i class="fas fa-rocket"></i> Запустить обучение</button>
+                        <div class="hint" style="font-size:0.7rem; color:#94a3b8; margin-top:10px;">Модель YOLOv8 — появится в списке после завершения</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-list-ol"></i> Очередь задач</h3>
+                        <span class="badge" id="queueLength">0</span>
+                    </div>
+                    <div id="queueList">
+                        <div class="empty-state"><i class="fas fa-hourglass"></i> Нет активных задач</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-history"></i> Ранее обученные модели</h3>
+                    <button class="btn btn-outline" id="refreshModelsBtn" style="padding:6px 12px;"><i class="fas fa-sync-alt"></i> Обновить</button>
+                </div>
+                <div id="modelsHistory">
+                    {% if models %}
+                        {% for model in models %}
+                        <div class="model-history-item">
+                            <div>
+                                <strong>{{ model.name }}</strong> <span class="badge" style="font-size:0.65rem;">готово</span>
+                                <div style="font-size:0.7rem; color:#5f6c84;">📅 {{ model.created_at.strftime('%Y-%m-%d %H:%M') }} · 👤 {{ user_map.get(model.uploaded_by, 'admin') }}</div>
+                            </div>
+                            <button class="btn btn-outline" style="padding:4px 12px;" onclick="alert('Модель готова к использованию в разделе Проверка модели')"><i class="fas fa-download"></i> Скачать</button>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state"><i class="fas fa-database"></i> История пуста</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+<div id="toastMsg" class="toast"></div>
+<div id="previewModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header"><i class="fas fa-images"></i> Предпросмотр датасета</div>
+        <div id="modalDatasetName" style="font-weight:500;"></div>
+        <div id="modalImageGrid" class="image-preview-grid"></div>
+        <button class="btn btn-outline" style="margin-top:16px; width:100%;" onclick="closeModal()">Закрыть</button>
+    </div>
+</div>
+
+<script>
+    const PROJECT_ID = {{ project.id }};
+    let statusInterval = null;
+    
+    function showToast(msg, type) {
+        const toast = document.getElementById('toastMsg');
+        toast.textContent = msg;
+        toast.className = `toast show ${type}`;
+        setTimeout(() => toast.classList.remove('show'), 3800);
+    }
+    
+    async function fetchServerStatus() {
+        try {
+            const resp = await fetch(`/project/${PROJECT_ID}/api/trainer_status`);
+            const data = await resp.json();
+            if (!data.success) return;
+            
+            const led = document.getElementById('serverLed');
+            const state = data.server.status;
+            led.className = `status-led ${state === 'busy' ? 'busy' : 'online'}`;
+            document.getElementById('serverStateText').innerText = state === 'busy' ? 'Выполняется обучение' : 'Сервер готов';
+            document.getElementById('serverLoadText').innerHTML = `загрузка ЦП: ${data.server.cpu_load}% | GPU: ${data.server.gpu_load}%`;
+            document.getElementById('cpuFill').style.width = data.server.cpu_load + '%';
+            document.getElementById('activeJobsCount').innerText = data.server.active_jobs;
+            
+            const queueDiv = document.getElementById('queueList');
+            if (data.queue && data.queue.length > 0) {
+                document.getElementById('queueLength').innerText = data.queue.length;
+                queueDiv.innerHTML = data.queue.map(task => `
+                    <div class="queue-item">
+                        <div>
+                            <div class="queue-name">📁 ${task.dataset_name}</div>
+                            <div class="queue-meta">📸 ${task.images_count} фото | 👤 ${task.requested_by} | ⏱️ ~${task.estimated_minutes} мин</div>
+                        </div>
+                        <span class="badge-queue">в очереди #${task.position}</span>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('queueLength').innerText = '0';
+                queueDiv.innerHTML = '<div class="empty-state"><i class="fas fa-hourglass"></i> Нет активных задач</div>';
+            }
+            
+            if (data.history && data.history.length > 0 && document.getElementById('modelsHistory').innerHTML.includes('История пуста')) {
+                document.getElementById('modelsHistory').innerHTML = data.history.map(m => `
+                    <div class="model-history-item">
+                        <div>
+                            <strong>${m.name}</strong> <span class="badge" style="font-size:0.65rem;">готово</span>
+                            <div style="font-size:0.7rem; color:#5f6c84;">📅 ${m.created_at} · 👤 ${m.requested_by}</div>
+                        </div>
+                        <button class="btn btn-outline" style="padding:4px 12px;" onclick="alert('Модель готова к использованию')"><i class="fas fa-download"></i> Скачать</button>
+                    </div>
+                `).join('');
+            }
+        } catch(e) { console.error(e); }
+    }
+    
+    async function sendTraining() {
+        const select = document.getElementById('datasetSelect');
+        const datasetId = select.value;
+        
+        showToast('🚀 Отправка датасета на обучение...', 'success');
+        try {
+            const resp = await fetch(`/project/${PROJECT_ID}/api/train`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dataset_id: datasetId })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                showToast(`✅ Обучение запущено! Оценка: ~${Math.ceil(data.estimated_seconds/60)} минут`, 'success');
+                setTimeout(() => fetchServerStatus(), 2000);
+            } else {
+                showToast('❌ Ошибка: ' + data.error, 'error');
+            }
+        } catch(e) { showToast('Ошибка соединения', 'error'); }
+    }
+    
+    function openPreview() {
+        const modal = document.getElementById('previewModal');
+        const select = document.getElementById('datasetSelect');
+        const dsName = select.options[select.selectedIndex]?.text.split('(')[0] || 'Датасет';
+        document.getElementById('modalDatasetName').innerHTML = `<i class="fas fa-folder-open"></i> ${dsName}`;
+        const grid = document.getElementById('modalImageGrid');
+        grid.innerHTML = `
+            {% for img in datasets[0].preview_images[:9] %}
+            <div style="background:#f1f5f9; border-radius:10px; display:flex; align-items:center; justify-content:center; height:70px;"><i class="fas fa-image" style="font-size:2rem; color:#94a3b8;"></i></div>
+            {% endfor %}
+        `;
+        modal.classList.add('active');
+    }
+    function closeModal() { document.getElementById('previewModal').classList.remove('active'); }
+    
+    document.getElementById('burgerToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('collapsed'));
+    document.getElementById('sendTrainBtn').addEventListener('click', sendTraining);
+    document.getElementById('previewDatasetBtn').addEventListener('click', openPreview);
+    document.getElementById('refreshModelsBtn').addEventListener('click', fetchServerStatus);
+    window.closeModal = closeModal;
+    
+    statusInterval = setInterval(fetchServerStatus, 3000);
+    fetchServerStatus();
+</script>
+</body>
+</html>

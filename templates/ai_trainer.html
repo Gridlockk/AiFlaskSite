@@ -309,27 +309,33 @@
             <h3>Label<span style="font-weight:300;">Kit</span></h3>
         </div>
         <div class="nav-menu">
-            <a href="{{ url_for('project_dashboard', project_id=project.id) }}" class="nav-item">
-                <i class="fas fa-chalkboard-user"></i><span>Главная</span>
+            <a class="nav-item" href="{{ url_for('project_dashboard', project_id=project_id) }}">
+                <i class="fas fa-chalkboard-user"></i>
+                <span>Главная</span>
             </a>
-            <a href="{{ url_for('project_users_list', project_id=project.id) }}" class="nav-item">
-                <i class="fas fa-users"></i><span>Участники</span>
-            </a>
-            <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item">
-                <i class="fas fa-microchip"></i><span>Проверка модели</span>
-            </a>
-            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
-                <i class="fas fa-photo-video"></i><span>Медиа</span>
-            </a>
-            <div class="nav-item active">
-                <i class="fas fa-brain"></i><span>AI Trainer</span>
+
+            {% if role == "admin" %}
+            <div class="nav-item" onclick="goToUsers()">
+                <i class="fas fa-users"></i>
+                <span>Участники</span>
             </div>
-        </div>
-        <div class="sidebar-footer">
-            <a href="{{ url_for('logout') }}" class="nav-item">
-                <i class="fas fa-sign-out-alt"></i><span>Выйти</span>
+            <div onclick="location.href='{{ url_for('project_inference', project_id=project.id) }}'" class="nav-item">
+                <i class="fas fa-microchip"></i>
+                <span>Проверка модели</span>
+            </div>
+            <a href="{{ url_for('ai_trainer', project_id=project.id) }}" class="nav-item active">
+                <i class="fas fa-brain"></i>
+                <span>AI Trainer</span>
             </a>
-        </div>
+            {% endif %}
+            <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-photo-video"></i>
+                <span>Медиа</span>
+            </a>
+            <a href="{{ url_for('project_select') }}" class="nav-item">
+                <i class="fas fa-tasks"></i>
+                <span>Выбор проектов</span>
+            </a>
     </aside>
 
     <main class="main-content">
@@ -381,12 +387,25 @@
                                 <strong>{{ datasets[0].name }}</strong><br>
                                 <span>{{ datasets[0].images_count }}</span> изображений, размечено <span>{{ datasets[0].annotated_count }}</span>
                             </div>
+                            <!--
                             <button class="btn btn-outline" id="previewDatasetBtn" style="margin-left:auto;"><i class="fas fa-eye"></i> Предпросмотр</button>
+                             -->
+
                         </div>
+                        <!--
                         <div class="estimation-badge" style="display:inline-flex; gap:8px; margin-bottom:16px;">
                             <i class="fas fa-clock"></i> <span id="etaEstimate">Оценка: ~{{ (datasets[0].images_count / 120)|round|int }} мин</span>
                         </div>
+                        -->
+
                         <button id="sendTrainBtn" class="btn btn-primary" style="width:100%;"><i class="fas fa-rocket"></i> Запустить обучение</button>
+                        <div id="trainProgress" style="display:none; margin-top:16px;">
+     <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#5f6c84;margin-bottom:6px;">
+       <span id="progressLabel">Подготовка...</span>
+       <span id="progressPct">0%</span>
+     </div>
+     <div class="progress-bar-bg"><div class="progress-fill" id="trainFill" style="width:0%;transition:width 0.5s;"></div></div>
+   </div>
                         <div class="hint" style="font-size:0.7rem; color:#94a3b8; margin-top:10px;">Модель YOLOv8 — появится в списке после завершения</div>
                     </div>
                 </div>
@@ -409,15 +428,7 @@
                 </div>
                 <div id="modelsHistory">
                     {% if models %}
-                        {% for model in models %}
-                        <div class="model-history-item">
-                            <div>
-                                <strong>{{ model.name }}</strong> <span class="badge" style="font-size:0.65rem;">готово</span>
-                                <div style="font-size:0.7rem; color:#5f6c84;">📅 {{ model.created_at.strftime('%Y-%m-%d %H:%M') }} · 👤 {{ user_map.get(model.uploaded_by, 'admin') }}</div>
-                            </div>
-                            <button class="btn btn-outline" style="padding:4px 12px;" onclick="alert('Модель готова к использованию в разделе Проверка модели')"><i class="fas fa-download"></i> Скачать</button>
-                        </div>
-                        {% endfor %}
+
                     {% else %}
                         <div class="empty-state"><i class="fas fa-database"></i> История пуста</div>
                     {% endif %}
@@ -438,103 +449,181 @@
 
 <script>
     const PROJECT_ID = {{ project.id }};
-    let statusInterval = null;
-    
-    function showToast(msg, type) {
+    let activeJobId  = null;
+    let pollTimer    = null;
+
+    /* ── Toast ── */
+    function showToast(msg, type = '') {
         const toast = document.getElementById('toastMsg');
         toast.textContent = msg;
         toast.className = `toast show ${type}`;
-        setTimeout(() => toast.classList.remove('show'), 3800);
+        setTimeout(() => toast.classList.remove('show'), 4000);
     }
-    
+
+    /* ── Обновление прогресс-бара ── */
+    function setProgress(pct, label) {
+        const wrap = document.getElementById('trainProgress');
+        if (!wrap) return;
+        wrap.style.display = 'block';
+        document.getElementById('trainFill').style.width = pct + '%';
+        document.getElementById('progressPct').textContent = pct + '%';
+        document.getElementById('progressLabel').textContent = label || 'Обучение...';
+    }
+
+    /* ── Опрос статуса задачи ── */
+    function startPolling(jobId) {
+        activeJobId = jobId;
+        clearInterval(pollTimer);
+
+        pollTimer = setInterval(async () => {
+            try {
+                const resp = await fetch(`/project/${PROJECT_ID}/api/job_status/${jobId}`);
+                const data = await resp.json();
+                if (!data.success) return;
+
+                const status = data.status;
+                setProgress(data.progress || 0, data.message);
+
+                if (status === 'done') {
+                    clearInterval(pollTimer);
+                    showToast('✅ Обучение завершено! Модель добавлена в проект.', 'success');
+                    setProgress(100, 'Готово');
+                    document.getElementById('sendTrainBtn').disabled = false;
+                    fetchServerStatus();   // обновляем историю
+                }
+
+                if (status === 'error') {
+                    clearInterval(pollTimer);
+                    showToast('❌ Ошибка обучения: ' + (data.message || 'неизвестная ошибка'), 'error');
+                    setProgress(0, 'Ошибка');
+                    document.getElementById('sendTrainBtn').disabled = false;
+                }
+
+            } catch(e) { console.warn('Poll error:', e); }
+        }, 3000);
+    }
+
+    /* ── Запуск обучения ── */
+    async function sendTraining() {
+        const btn = document.getElementById('sendTrainBtn');
+        btn.disabled = true;
+        showToast('🚀 Отправка датасета...', 'success');
+        setProgress(0, 'Отправка...');
+
+        try {
+            const resp = await fetch(`/project/${PROJECT_ID}/api/train`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    epochs: parseInt(document.getElementById('epochsInput')?.value || 10),
+                    imgsz:  parseInt(document.getElementById('imgszSelect')?.value || 640),
+                    model:  document.getElementById('modelSelect')?.value || 'yolov8n.pt',
+                }),
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                showToast(`✅ Задача запущена (${data.images_sent} фото). Ожидайте...`, 'success');
+                startPolling(data.job_id);
+            } else {
+                showToast('❌ ' + (data.error || 'Ошибка'), 'error');
+                setProgress(0, '');
+                btn.disabled = false;
+            }
+        } catch(e) {
+            showToast('Ошибка соединения с сервером', 'error');
+            btn.disabled = false;
+        }
+    }
+
+    /* ── Статус сервера (опрос каждые 5 с) ── */
     async function fetchServerStatus() {
         try {
             const resp = await fetch(`/project/${PROJECT_ID}/api/trainer_status`);
             const data = await resp.json();
             if (!data.success) return;
-            
+
+            /* LED */
             const led = document.getElementById('serverLed');
-            const state = data.server.status;
-            led.className = `status-led ${state === 'busy' ? 'busy' : 'online'}`;
-            document.getElementById('serverStateText').innerText = state === 'busy' ? 'Выполняется обучение' : 'Сервер готов';
-            document.getElementById('serverLoadText').innerHTML = `загрузка ЦП: ${data.server.cpu_load}% | GPU: ${data.server.gpu_load}%`;
-            document.getElementById('cpuFill').style.width = data.server.cpu_load + '%';
-            document.getElementById('activeJobsCount').innerText = data.server.active_jobs;
-            
+            if (!data.trainer_online) {
+                led.className = 'status-led';
+                document.getElementById('serverStateText').innerText = 'Trainer-сервис офлайн';
+                document.getElementById('serverLoadText').innerHTML   = 'Запустите trainer.py';
+                document.getElementById('cpuFill').style.width        = '0%';
+                document.getElementById('activeJobsCount').innerText  = '—';
+            } else {
+                const srv = data.server;
+                led.className = `status-led ${srv.status === 'busy' ? 'busy' : 'online'}`;
+                document.getElementById('serverStateText').innerText = srv.status === 'busy' ? 'Выполняется обучение' : 'Сервер готов';
+                document.getElementById('serverLoadText').innerHTML   = `ЦП: ${srv.cpu_load}% | RAM: ${srv.ram_usage}%`;
+                document.getElementById('cpuFill').style.width        = srv.cpu_load + '%';
+                document.getElementById('activeJobsCount').innerText  = srv.active_jobs;
+            }
+
+            /* Очередь */
             const queueDiv = document.getElementById('queueList');
-            if (data.queue && data.queue.length > 0) {
-                document.getElementById('queueLength').innerText = data.queue.length;
+            document.getElementById('queueLength').innerText = data.queue.length || '0';
+            if (data.queue.length > 0) {
                 queueDiv.innerHTML = data.queue.map(task => `
                     <div class="queue-item">
                         <div>
-                            <div class="queue-name">📁 ${task.dataset_name}</div>
-                            <div class="queue-meta">📸 ${task.images_count} фото | 👤 ${task.requested_by} | ⏱️ ~${task.estimated_minutes} мин</div>
+                            <div>📁 ${task.dataset_name}</div>
+                            <div style="font-size:0.7rem;color:#5f6c84;">
+                                👤 ${task.requested_by}
+                                ${task.progress > 0 ? `· ${task.progress}% — ${task.message}` : ''}
+                            </div>
                         </div>
-                        <span class="badge-queue">в очереди #${task.position}</span>
+                        <span class="badge-queue">#${task.position}</span>
                     </div>
                 `).join('');
             } else {
-                document.getElementById('queueLength').innerText = '0';
                 queueDiv.innerHTML = '<div class="empty-state"><i class="fas fa-hourglass"></i> Нет активных задач</div>';
             }
-            
-            if (data.history && data.history.length > 0 && document.getElementById('modelsHistory').innerHTML.includes('История пуста')) {
-                document.getElementById('modelsHistory').innerHTML = data.history.map(m => `
-                    <div class="model-history-item">
-                        <div>
-                            <strong>${m.name}</strong> <span class="badge" style="font-size:0.65rem;">готово</span>
-                            <div style="font-size:0.7rem; color:#5f6c84;">📅 ${m.created_at} · 👤 ${m.requested_by}</div>
+
+            /* История */
+            const histDiv = document.getElementById('modelsHistory');
+            if (data.history && data.history.length > 0) {
+                histDiv.innerHTML = data.history.map(j => {
+                    const statusIcon = j.status === 'done'    ? '✅'
+                                     : j.status === 'error'   ? '❌'
+                                     : j.status === 'training' ? '⏳' : '🕐';
+                    const statusBadge = j.status === 'done' ? 'готово'
+                                      : j.status === 'error' ? 'ошибка'
+                                      : j.status || 'в очереди';
+                    return `
+                        <div class="model-history-item">
+                            <div>
+                                <strong>${statusIcon} ${j.model_filename || 'обучается...'}</strong>
+                                <span class="badge" style="font-size:0.65rem;">${statusBadge}</span>
+                                <div style="font-size:0.7rem;color:#5f6c84;">📅 ${j.created_at} · 👤 ${j.requested_by}</div>
+                                ${j.status !== 'done' && j.progress > 0 ? `<div style="font-size:0.7rem;color:#2d4059;">${j.progress}% — ${j.message || ''}</div>` : ''}
+                            </div>
+                            ${j.status === 'done' ? `<button class="btn btn-outline" style="padding:4px 12px;" onclick="alert('Модель доступна в разделе Проверка модели')"><i class="fas fa-check"></i> Готово</button>` : ''}
                         </div>
-                        <button class="btn btn-outline" style="padding:4px 12px;" onclick="alert('Модель готова к использованию')"><i class="fas fa-download"></i> Скачать</button>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
             }
-        } catch(e) { console.error(e); }
+
+        } catch(e) { console.warn('Status error:', e); }
     }
-    
-    async function sendTraining() {
-        const select = document.getElementById('datasetSelect');
-        const datasetId = select.value;
-        
-        showToast('🚀 Отправка датасета на обучение...', 'success');
-        try {
-            const resp = await fetch(`/project/${PROJECT_ID}/api/train`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dataset_id: datasetId })
-            });
-            const data = await resp.json();
-            if (data.success) {
-                showToast(`✅ Обучение запущено! Оценка: ~${Math.ceil(data.estimated_seconds/60)} минут`, 'success');
-                setTimeout(() => fetchServerStatus(), 2000);
-            } else {
-                showToast('❌ Ошибка: ' + data.error, 'error');
-            }
-        } catch(e) { showToast('Ошибка соединения', 'error'); }
-    }
-    
+
+    /* ── Предпросмотр ── */
     function openPreview() {
-        const modal = document.getElementById('previewModal');
-        const select = document.getElementById('datasetSelect');
-        const dsName = select.options[select.selectedIndex]?.text.split('(')[0] || 'Датасет';
-        document.getElementById('modalDatasetName').innerHTML = `<i class="fas fa-folder-open"></i> ${dsName}`;
-        const grid = document.getElementById('modalImageGrid');
-        grid.innerHTML = `
-            {% for img in datasets[0].preview_images[:9] %}
-            <div style="background:#f1f5f9; border-radius:10px; display:flex; align-items:center; justify-content:center; height:70px;"><i class="fas fa-image" style="font-size:2rem; color:#94a3b8;"></i></div>
-            {% endfor %}
-        `;
-        modal.classList.add('active');
+        document.getElementById('previewModal').classList.add('active');
     }
-    function closeModal() { document.getElementById('previewModal').classList.remove('active'); }
-    
-    document.getElementById('burgerToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('collapsed'));
-    document.getElementById('sendTrainBtn').addEventListener('click', sendTraining);
-    document.getElementById('previewDatasetBtn').addEventListener('click', openPreview);
-    document.getElementById('refreshModelsBtn').addEventListener('click', fetchServerStatus);
+    function closeModal() {
+        document.getElementById('previewModal').classList.remove('active');
+    }
     window.closeModal = closeModal;
-    
-    statusInterval = setInterval(fetchServerStatus, 3000);
+
+    /* ── Инициализация ── */
+    document.getElementById('burgerToggle').addEventListener('click', () =>
+        document.getElementById('sidebar').classList.toggle('collapsed'));
+    document.getElementById('sendTrainBtn').addEventListener('click', sendTraining);
+    document.getElementById('previewDatasetBtn')?.addEventListener('click', openPreview);
+    document.getElementById('refreshModelsBtn').addEventListener('click', fetchServerStatus);
+
+    setInterval(fetchServerStatus, 5000);
     fetchServerStatus();
 </script>
 </body>

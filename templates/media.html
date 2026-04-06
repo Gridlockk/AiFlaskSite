@@ -243,6 +243,10 @@
             <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item">
             <i class="fas fas fa-microchip"></i><span>Проверка модели</span>
             </a>
+            <a href="{{ url_for('ai_trainer', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-brain"></i>
+                <span>AI Trainer</span>
+            </a>
             {% endif %}
             <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item active">
                 <i class="fas fa-photo-video"></i><span>Медиа</span>

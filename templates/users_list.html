@@ -436,9 +436,12 @@
 
 
              <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item">
-            <i class="fas fas fa-microchip"></i><span>Проверка Модели</span>
+            <i class="fas fas fa-microchip"></i><span>Проверка модели</span>
             </a>
-
+            <a href="{{ url_for('ai_trainer', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-brain"></i>
+                <span>AI Trainer</span>
+            </a>
             <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item" style="text-decoration:none;">
                 <i class="fas fa-photo-video"></i>
                 <span>Медиа</span>
@@ -479,17 +482,7 @@
             </div>
         </div>
 
-        <!-- Флеш-сообщения -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash-message">
-                        <i class="fas fa-info-circle"></i> {{ message }}
-                        <i class="fas fa-times" style="cursor:pointer;" onclick="this.parentElement.remove()"></i>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+
 
         <div class="workspace">
             <!-- Таблица пользователей -->
@@ -514,7 +507,7 @@
                         <tbody>
                             {% if users %}
                                 {% for user in users %}
-<tr data-user-id="{{ user.user.id }}">
+<tr data-user-id="{{ user.user.id }}" data-role="{{ user.role }}">
     <td>{{ user.user.id }}</td>
     <td>
         {{ user.user.username }}
@@ -523,10 +516,13 @@
         {% endif %}
     </td>
     <td>
-        {% if user.user.id == current_user.id %}
-        <!-- Себя не меняем — просто текст -->
+        {% if user.user.id == current_user.id or user.role == 'admin' %}
+        <!-- Себя и других админов не меняем -->
         <span style="padding:6px 12px;background:#f1f4f9;border-radius:30px;font-size:0.85rem;color:#5f6c84;">
             {{ user.role }}
+            {% if user.role == 'admin' %}
+            <i class="fas fa-shield-alt" style="margin-left:4px;color:#3f5575;" title="Администратор защищён"></i>
+            {% endif %}
         </span>
         {% else %}
         <select class="role-select"
@@ -539,12 +535,12 @@
         {% endif %}
     </td>
     <td class="action-buttons">
-        {% if user.user.id != current_user.id %}
+        {% if user.user.id != current_user.id and user.role != 'admin' %}
         <button class="btn-icon btn-danger" onclick="removeUser({{ user.user.id }}, '{{ user.user.username }}')">
             <i class="fas fa-trash-alt"></i>
         </button>
         {% else %}
-        <span style="font-size:0.75rem;color:#94a3b8;">—</span>
+        <span style="font-size:0.75rem;color:#94a3b8;" title="{% if user.role == 'admin' %}Нельзя удалить администратора{% else %}Это вы{% endif %}">—</span>
         {% endif %}
     </td>
 </tr>
@@ -567,17 +563,19 @@
                         <i class="fas fa-user-plus"></i> <span>Добавить участника</span>
                     </div>
                     <form id="addUserForm" onsubmit="addUserToProject(event)">
-                        <div class="form-group">
-                            <input type="number" id="userIdInput" placeholder="ID пользователя" required>
-                        </div>
-                        <div class="form-group">
-                            <select id="newUserRole">
-                                <option value="annotator">Annotator (разметчик)</option>
-                                <option value="admin">Admin (администратор)</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="submit-btn"><i class="fas fa-plus-circle"></i> Добавить в проект</button>
-                    </form>
+    <div class="form-group">
+        <input type="text" id="userIdInput" placeholder="Email или имя пользователя" required="">
+    </div>
+    <div class="form-group">
+        <select id="newUserRole">
+            <option value="annotator">Annotator (разметчик)</option>
+            <option value="admin">Admin (администратор)</option>
+        </select>
+    </div>
+    <button type="submit" class="submit-btn">
+        <i class="fas fa-plus-circle"></i> Добавить в проект
+    </button>
+</form>
                     <div class="info-note">
                         <i class="fas fa-info-circle"></i>
                         <span>Пользователь должен быть зарегистрирован в системе. После добавления ему будет назначена выбранная роль в текущем проекте.</span>
@@ -697,54 +695,27 @@
         });
     };
 
-    // Добавление пользователя в проект
-    window.addUserToProject = function(event) {
-        event.preventDefault();
-        const userId = document.getElementById('userIdInput').value;
-        const role = document.getElementById('newUserRole').value;
-        if (!userId) {
-            showFlashMessage('Введите ID пользователя', 'error');
-            return;
-        }
-        fetch('/project/{{ project.id }}/add_user_to_project', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCsrfToken()
-            },
-            body: JSON.stringify({
-                user_id: parseInt(userId),
-                role: role,
-                project_id: {{ project.id if project else 'null' }}
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Добавляем новую строку в таблицу
-                const newUser = data.user; // ожидаем { id, username, role }
-                if (newUser) {
-                    addUserRowToTable(newUser.id, newUser.username, newUser.role);
-                    document.getElementById('userIdInput').value = '';
-                    showFlashMessage(`Пользователь ${newUser.username} добавлен в проект`, 'success');
-                    // Обновляем счетчик
-                    const totalSpan = document.getElementById('totalUsersCount');
-                    if (totalSpan) {
-                        let current = parseInt(totalSpan.innerText);
-                        totalSpan.innerText = current + 1;
-                    }
-                } else {
-                    showFlashMessage('Пользователь добавлен, но данные не получены', 'info');
-                }
-            } else {
-                showFlashMessage(data.error || 'Не удалось добавить пользователя', 'error');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            showFlashMessage('Ошибка сети', 'error');
-        });
-    };
+
+
+
+async function addUserToProject(event) {
+    event.preventDefault();
+    const query = document.getElementById('userIdInput').value.trim();
+    const role = document.getElementById('newUserRole').value;
+
+    const response = await fetch(`/project/{{ project.id }}/add_user_to_project`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query, role: role })
+    });
+
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+    } else {
+        alert('Ошибка: ' + data.error);
+    }
+}
 
     // Вспомогательная функция для добавления строки в таблицу
     function addUserRowToTable(userId, username, role) {
@@ -766,9 +737,7 @@
                 </select>
             </td>
             <td class="action-buttons">
-                <button class="btn-update" onclick="updateRole(${userId})">
-                    <i class="fas fa-save"></i> Изменить
-                </button>
+
                 <button class="btn-icon btn-danger" onclick="removeUser(${userId}, '${escapeHtml(username)}')">
                     <i class="fas fa-trash-alt"></i>
                 </button>

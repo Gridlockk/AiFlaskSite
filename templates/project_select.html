@@ -584,7 +584,6 @@
                 <div class="info-block">
                     <div class="info-header">
                         <i class="fas fa-plus-circle"></i> <span>Создать проект</span>
-                        <span style="margin-left: auto; font-size: 0.7rem; background:#eef2f9; padding:2px 8px; border-radius:30px;">админ</span>
                     </div>
                     <div class="create-project-form">
                         <form id="createProjectForm" action="{{ url_for('create_project') }}" method="POST">
@@ -608,16 +607,16 @@
                         <div class="stat-item">
                             <span class="stat-label">Всего проектов</span>
                             <span class="stat-value">
-{{ projects|length }}
+{{ projects_info|length }}
 </span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">В работе</span>
-                            <span class="stat-value" id="activeProjectsCount">0</span>
+                            <span class="stat-value" id="activeProjectsCount">{{ active_count }}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">Завершено</span>
-                            <span class="stat-value" id="completedProjectsCount">0</span>
+                            <span class="stat-value" id="completedProjectsCount"> {{ completed_count }}</span>
                         </div>
                     </div>
                     <div class="info-note">

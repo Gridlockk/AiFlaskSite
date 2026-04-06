@@ -6,7 +6,7 @@ from functools import wraps
 import os
 from sqlalchemy import func
 from datetime import datetime
-
+import requests
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey'
@@ -18,6 +18,8 @@ app.config['MODELS_FOLDER'] = 'static/models'
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+login_manager.login_message = 'Войдите, чтобы получить доступ к этой странице.'
+login_manager.login_message_category = 'warning'
 
 # ======== Роли ========
 class Role:
@@ -177,12 +179,19 @@ class User(db.Model, UserMixin):
 @app.route('/project/<int:project_id>/delete_model/<int:model_id>', methods=['POST'])
 @login_required
 def delete_model(project_id, model_id):
+    print(f"=== DELETE MODEL === project_id={project_id}, model_id={model_id}")
+
     project = Project.query.get_or_404(project_id)
+    print(f"Project found: {project}")
 
     if get_user_role(current_user, project) != Role.ADMIN:
         return jsonify({"success": False, "error": "Нет доступа"})
 
-    model = Model.query.get_or_404(model_id)
+    model = Model.query.filter_by(id=model_id, project_id=project_id).first()
+    print(f"Model found: {model}")
+
+    if not model:
+        return jsonify({"success": False, "error": f"Модель {model_id} не найдена в проекте {project_id}"})
 
     filepath = os.path.join(app.config['MODELS_FOLDER'], model.filename)
     if os.path.exists(filepath):
@@ -300,15 +309,14 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+
     if request.method == 'POST':
-        # Берём значения прямо по name из формы
-        full_name = request.form.get('fullName')  # имя и фамилия
+
+        full_name = request.form.get('fullName')
         email = request.form.get('email')
         password_raw = request.form.get('password')
-        team = request.form.get('team', 'Моя команда')
-        terms_accepted = request.form.get('terms')  # если чекбокс не отмечен, будет None
+        terms_accepted = request.form.get('terms')
 
-        # Проверка обязательных полей
         if not full_name or not email or not password_raw:
             flash("Заполните все обязательные поля", "danger")
             return redirect(url_for('register'))
@@ -317,15 +325,22 @@ def register():
             flash("Необходимо принять условия использования", "danger")
             return redirect(url_for('register'))
 
-        # Хэшируем пароль
-        password_hashed = generate_password_hash(password_raw, method='pbkdf2:sha256')
-        # Проверяем, что email ещё не зарегистрирован
+        if User.query.filter_by(username=full_name).first():
+            flash("Пользователь уже существует", "danger")
+            return redirect(url_for('register'))
+
         if User.query.filter_by(email=email).first():
             flash("Email уже зарегистрирован", "danger")
             return redirect(url_for('register'))
 
-        # Создаём пользователя
-        user = User(username=full_name, email=email, password=password_hashed, team=team)
+        password_hashed = generate_password_hash(password_raw, method='pbkdf2:sha256')
+
+        user = User(
+            username=full_name,
+            email=email,
+            password=password_hashed
+        )
+
         db.session.add(user)
         db.session.commit()
 
@@ -335,10 +350,11 @@ def register():
     return render_template('register.html')
 
 
+
 @app.route('/project_select')
 @login_required
 def project_select():
-    projects = current_user.projects  # все проекты, в которых участвует пользователь
+    projects = current_user.projects
 
     projects_info = []
     for project in projects:
@@ -348,9 +364,15 @@ def project_select():
             "role": role
         })
 
+    # Добавляем подсчёт статусов
+    active_count = sum(1 for p in projects if p.status == 'active')
+    completed_count = sum(1 for p in projects if p.status == 'completed')
+
     return render_template(
         "project_select.html",
-        projects_info=projects_info
+        projects_info=projects_info,
+        active_count=active_count,
+        completed_count=completed_count,
     )
 
 
@@ -404,6 +426,8 @@ def role_required_for_project(required_role):
 
 @app.route('/login', methods=['GET','POST'])
 def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('project_select'))
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
@@ -722,17 +746,39 @@ def save_annotation():
 @login_required
 def add_user_to_project(project_id):
     data = request.get_json()
-    user_id = data.get("user_id")
+    query = data.get("query", "").strip()
     role = data.get("role", Role.ANNOTATOR)
+
+    print(f"=== ADD USER DEBUG ===")
+    print(f"Query received: '{query}'")
+    print(f"Role: {role}")
 
     project = Project.query.get_or_404(project_id)
 
     if get_user_role(current_user, project) != Role.ADMIN:
         return jsonify({"success": False, "error": "Нет доступа"})
 
-    user = User.query.get(user_id)
+    # Ищем по email или username
+    user_by_email = User.query.filter(User.email == query).first()
+    user_by_name = User.query.filter(User.username == query).first()
+
+    print(f"Found by email: {user_by_email}")
+    print(f"Found by username: {user_by_name}")
+
+    # Выводим всех пользователей для сравнения
+    all_users = User.query.all()
+    print(f"All users in DB:")
+    for u in all_users:
+        print(f"  id={u.id} | username='{u.username}' | email='{u.email}'")
+
+    user = user_by_email or user_by_name
+
     if not user:
-        return jsonify({"success": False, "error": "Пользователь не найден"})
+        return jsonify({"success": False, "error": f"Пользователь '{query}' не найден"})
+
+    # Нельзя добавить самого себя
+    if user.id == current_user.id:
+        return jsonify({"success": False, "error": "Нельзя добавить самого себя"})
 
     existing = db.session.execute(
         user_project.select().where(
@@ -751,8 +797,6 @@ def add_user_to_project(project_id):
     db.session.commit()
 
     return jsonify({"success": True, "user": {"id": user.id, "username": user.username, "role": role}})
-
-
 @app.route('/project/<int:project_id>/media')
 @login_required
 def project_media(project_id):
@@ -928,6 +972,11 @@ def remove_user_from_project(project_id):
     if int(user_id) == current_user.id:
         return jsonify({"success": False, "error": "Нельзя удалить самого себя"})
 
+    # Нельзя удалить другого администратора
+    target_user = User.query.get(int(user_id))
+    if target_user and get_user_role(target_user, project) == Role.ADMIN:
+        return jsonify({"success": False, "error": "Нельзя удалить администратора проекта"})
+
     db.session.execute(
         user_project.delete().where(
             (user_project.c.user_id == user_id) &
@@ -949,8 +998,14 @@ def update_user_role(project_id):
 
     if get_user_role(current_user, project) != Role.ADMIN:
         return jsonify({"success": False, "error": "Нет доступа"})
+
     if int(user_id) == current_user.id:
         return jsonify({"success": False, "error": "Нельзя изменить свою роль"})
+
+    # Нельзя менять роль другого администратора
+    target_user = User.query.get(int(user_id))
+    if target_user and get_user_role(target_user, project) == Role.ADMIN:
+        return jsonify({"success": False, "error": "Нельзя изменить роль администратора"})
 
     db.session.execute(
         user_project.update().where(
@@ -1022,6 +1077,7 @@ def ai_trainer(project_id):
         'images_count': total_images,
         'annotated_count': annotated_images,
         'labels_count': len(labels),
+
         'preview_images': [{'filename': img.filename, 'id': img.id} for img in images[:9]]
     }]
 
@@ -1032,89 +1088,14 @@ def ai_trainer(project_id):
         models=models,
         user_map=user_map,
         role=role,
+        project_id=project_id,
         current_user=current_user
     )
 
 
-# API для отправки датасета на обучение
-@app.route('/project/<int:project_id>/api/train', methods=['POST'])
-@login_required
-def api_start_training(project_id):
-    """Запуск обучения модели на датасете"""
-    project = Project.query.get_or_404(project_id)
-
-    if get_user_role(current_user, project) != Role.ADMIN:
-        return jsonify({"success": False, "error": "Нет доступа"})
-
-    data = request.get_json()
-    dataset_id = data.get('dataset_id')
-
-    from datetime import datetime
-
-    # Здесь должна быть реальная логика отправки задачи в очередь
-    # Пока возвращаем успешный ответ с имитацией
-
-    return jsonify({
-        "success": True,
-        "job_id": int(datetime.now().timestamp()),
-        "estimated_seconds": max(300, int(project.image_count / 2) * 60) if hasattr(project, 'image_count') else 600,
-        "message": "Задача поставлена в очередь"
-    })
 
 
-# API для получения статуса сервера и очереди
-@app.route('/project/<int:project_id>/api/trainer_status', methods=['GET'])
-@login_required
-def api_trainer_status(project_id):
-    """Получение статуса сервера обучения и очереди задач"""
-    from datetime import datetime
-    import random
 
-    project = Project.query.get_or_404(project_id)
-
-    if get_user_role(current_user, project) != Role.ADMIN:
-        return jsonify({"success": False, "error": "Нет доступа"})
-
-    # Получаем пользователей для маппинга
-    user_map = {user.id: user.username for user in project.users}
-
-    # Формируем историю моделей из БД
-    models_history = []
-    for m in Model.query.filter_by(project_id=project_id).order_by(Model.created_at.desc()).limit(5).all():
-        models_history.append({
-            "id": m.id,
-            "name": m.name,
-            "created_at": m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else "неизвестно",
-            "requested_by": user_map.get(m.uploaded_by, "admin"),
-            "dataset": project.name,
-            "metrics": {"map": 0.82, "loss": 0.18}
-        })
-
-    # Имитация статуса сервера
-    is_busy = random.random() > 0.6
-
-    return jsonify({
-        "success": True,
-        "server": {
-            "online": True,
-            "status": "busy" if is_busy else "idle",
-            "cpu_load": random.randint(15, 85),
-            "gpu_load": random.randint(10, 90),
-            "ram_usage": random.randint(30, 80),
-            "active_jobs": 1 if is_busy else 0
-        },
-        "queue": [
-            {
-                "id": 1,
-                "dataset_name": project.name,
-                "images_count": Image.query.filter_by(project_id=project_id).count(),
-                "requested_by": current_user.username,
-                "position": 1,
-                "estimated_minutes": 8
-            }
-        ] if is_busy else [],
-        "history": models_history
-    })
 
 #---TEST ROUTE
 
@@ -1314,6 +1295,288 @@ def project_dashboard(project_id):
     }
 
     return render_template("dashboard.html", **context)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+TRAINER_URL = os.environ.get("TRAINER_URL", "http://127.0.0.1:5001")
+
+
+# ── Модель для хранения задач обучения в БД ───────────────────────────────────
+class TrainingJob(db.Model):
+    """Запись о задаче обучения, запущенной через trainer.py."""
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(64), unique=True, nullable=False)  # UUID от trainer
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    status = db.Column(db.String(20), default='queued')  # queued/training/done/error
+    progress = db.Column(db.Integer, default=0)
+    message = db.Column(db.String(256))
+    model_filename = db.Column(db.String(200))  # имя .onnx/.pt в shared folder
+    metrics = db.Column(db.Text)  # JSON-строка
+    created_at = db.Column(db.DateTime, default=db.func.now())
+    updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
+    requested_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+
+@app.route('/project/<int:project_id>/api/train', methods=['POST'])
+@login_required
+def api_start_training(project_id):
+    """
+    Собирает датасет из БД и отправляет задачу обучения в trainer.py.
+    Возвращает job_id для последующего опроса статуса.
+    """
+    project = Project.query.get_or_404(project_id)
+
+    if get_user_role(current_user, project) != Role.ADMIN:
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    data = request.get_json(silent=True) or {}
+    epochs = int(data.get('epochs', 10))
+    imgsz = int(data.get('imgsz', 640))
+    model_base = data.get('model', 'yolov8n.pt')
+
+    # ── Собираем все изображения с аннотациями ────────────────────────────────
+    images_info = []
+    for img in Image.query.filter_by(project_id=project_id).all():
+        anns = Annotation.query.filter_by(image_id=img.id).all()
+        if not anns:
+            continue
+        images_info.append({
+            "filename": img.filename,
+            "annotations": [
+                {"x": a.x, "y": a.y, "width": a.width, "height": a.height, "label": a.label}
+                for a in anns
+            ],
+        })
+
+    if not images_info:
+        return jsonify({"success": False, "error": "Нет размеченных изображений для обучения"})
+
+    # ── Отправляем задачу в trainer.py ───────────────────────────────────────
+    try:
+        resp = requests.post(
+            f"{TRAINER_URL}/train",
+            json={
+                "project_id": project_id,
+                "images": images_info,
+                "epochs": epochs,
+                "imgsz": imgsz,
+                "model": model_base,
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+    except requests.exceptions.ConnectionError:
+        return jsonify({"success": False, "error": "Trainer-сервис недоступен (проверьте, запущен ли trainer.py)"})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Ошибка связи с trainer: {e}"})
+
+    if not result.get("success"):
+        return jsonify(result)
+
+    job_id = result["job_id"]
+
+    # ── Сохраняем задачу в БД ────────────────────────────────────────────────
+    job = TrainingJob(
+        job_id=job_id,
+        project_id=project_id,
+        status='queued',
+        requested_by=current_user.id,
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "images_sent": len(images_info),
+        "message": f"Задача поставлена в очередь. Отправлено {len(images_info)} изображений.",
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Роут: опрос статуса задачи (вызывается JS каждые N секунд)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/project/<int:project_id>/api/job_status/<job_id>', methods=['GET'])
+@login_required
+def api_job_status(project_id, job_id):
+    """
+    Прокси-опрос: спрашиваем trainer.py и обновляем локальную БД.
+    Если trainer недоступен — отдаём то, что есть в БД.
+    """
+    project = Project.query.get_or_404(project_id)
+    if not get_user_role(current_user, project):
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    local_job = TrainingJob.query.filter_by(job_id=job_id).first()
+
+    # Спрашиваем живой статус у trainer
+    try:
+        resp = requests.get(f"{TRAINER_URL}/job_status/{job_id}", timeout=5)
+        remote = resp.json()
+
+        if remote.get("success") and local_job:
+            local_job.status = remote.get("status", local_job.status)
+            local_job.progress = remote.get("progress", local_job.progress)
+            local_job.message = remote.get("message", local_job.message)
+            if remote.get("model_filename"):
+                local_job.model_filename = remote["model_filename"]
+            if remote.get("metrics"):
+                import json as _json
+                local_job.metrics = _json.dumps(remote["metrics"])
+            db.session.commit()
+
+        return jsonify(remote)
+
+    except Exception:
+        # Trainer недоступен — возвращаем то, что есть в БД
+        if local_job:
+            return jsonify({
+                "success": True,
+                "job_id": job_id,
+                "status": local_job.status,
+                "progress": local_job.progress,
+                "message": local_job.message,
+                "model_filename": local_job.model_filename,
+                "trainer_offline": True,
+            })
+        return jsonify({"success": False, "error": "Задача не найдена"})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Роут: callback от trainer.py при завершении задачи
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/trainer_callback', methods=['POST'])
+def trainer_callback():
+    """
+    trainer.py отправляет сюда результат по завершении (или ошибке).
+    Обновляем БД и — если модель готова — регистрируем её в таблице Model.
+    """
+    data = request.get_json(silent=True) or {}
+    job_id = data.get("job_id")
+    if not job_id:
+        return jsonify({"ok": False}), 400
+
+    local_job = TrainingJob.query.filter_by(job_id=job_id).first()
+    if not local_job:
+        return jsonify({"ok": False, "error": "Unknown job"}), 404
+
+    import json as _json
+
+    local_job.status = data.get("status", local_job.status)
+    local_job.progress = data.get("progress", local_job.progress)
+    local_job.message = data.get("message", local_job.message)
+    model_filename = data.get("model_filename")
+
+    if model_filename:
+        local_job.model_filename = model_filename
+
+    if data.get("metrics"):
+        local_job.metrics = _json.dumps(data["metrics"])
+
+    # ── Если модель готова — добавляем в таблицу Model (для inference) ────────
+    if local_job.status == "done" and model_filename:
+        existing = Model.query.filter_by(filename=model_filename).first()
+        if not existing:
+            new_model = Model(
+                name=f"auto_trained_{job_id[:8]}.onnx",
+                filename=model_filename,
+                format="onnx",
+                project_id=local_job.project_id,
+                uploaded_by=local_job.requested_by,
+            )
+            db.session.add(new_model)
+
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Роут: статус сервера trainer (заменяет заглушку с random)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.route('/project/<int:project_id>/api/trainer_status', methods=['GET'])
+@login_required
+def api_trainer_status(project_id):
+    """
+    Реальный статус сервера: спрашиваем trainer /health + /jobs.
+    При недоступности trainer — возвращаем offline.
+    """
+    project = Project.query.get_or_404(project_id)
+    if not get_user_role(current_user, project):
+        return jsonify({"success": False, "error": "Нет доступа"})
+
+    user_map = {u.id: u.username for u in project.users}
+
+    # История из БД (не зависит от доступности trainer)
+    models_history = []
+    for job in TrainingJob.query.filter_by(project_id=project_id) \
+            .order_by(TrainingJob.created_at.desc()) \
+            .limit(10).all():
+        models_history.append({
+            "job_id": job.job_id,
+            "status": job.status,
+            "progress": job.progress,
+            "message": job.message,
+            "model_filename": job.model_filename,
+            "requested_by": user_map.get(job.requested_by, "—"),
+            "created_at": job.created_at.strftime("%Y-%m-%d %H:%M") if job.created_at else "—",
+        })
+
+    try:
+        health_resp = requests.get(f"{TRAINER_URL}/health", timeout=3).json()
+        jobs_resp = requests.get(f"{TRAINER_URL}/jobs", timeout=3).json()
+
+        active_jobs = [
+            j for j in jobs_resp.get("jobs", [])
+            if j.get("project_id") == project_id
+               and j.get("status") in ("queued", "preparing", "training", "exporting")
+        ]
+
+        return jsonify({
+            "success": True,
+            "trainer_online": True,
+            "server": {
+                "online": True,
+                "status": "busy" if health_resp.get("active_jobs", 0) > 0 else "idle",
+                "cpu_load": health_resp.get("cpu_percent", 0),
+                "gpu_load": 0,
+                "ram_usage": health_resp.get("ram_percent", 0),
+                "active_jobs": health_resp.get("active_jobs", 0),
+            },
+            "queue": [
+                {
+                    "id": j["job_id"],
+                    "dataset_name": project.name,
+                    "images_count": Image.query.filter_by(project_id=project_id).count(),
+                    "requested_by": user_map.get(j.get("project_id"), current_user.username),
+                    "position": i + 1,
+                    "estimated_minutes": 5,
+                    "progress": j.get("progress", 0),
+                    "message": j.get("message", ""),
+                }
+                for i, j in enumerate(active_jobs)
+            ],
+            "history": models_history,
+        })
+
+    except Exception:
+        return jsonify({
+            "success": True,
+            "trainer_online": False,
+            "server": {
+                "online": False,
+                "status": "offline",
+                "cpu_load": 0,
+                "gpu_load": 0,
+                "ram_usage": 0,
+                "active_jobs": 0,
+            },
+            "queue": [],
+            "history": models_history,
+        })
+
+
 # ======== Запуск ========
 if __name__ == "__main__":
     with app.app_context():  # <-- создаём контекст приложения

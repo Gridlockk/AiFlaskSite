@@ -125,6 +125,20 @@
                             <p class="text-gray-500 text-sm mt-1">Войдите, чтобы продолжить работу</p>
                         </div>
 
+
+                            {% with messages = get_flashed_messages(with_categories=true) %}
+                                {% if messages %}
+                                    {% for category, message in messages %}
+                                    <div class="mb-4 px-4 py-3 rounded-xl text-sm font-medium
+                                      {% if category == 'danger' %}bg-red-50 text-red-700 border border-red-200
+                                      {% elif category == 'warning' %}bg-yellow-50 text-yellow-700 border border-yellow-200
+                                      {% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">
+                                      {{ message }}
+                                      </div>
+                                   {% endfor %}
+                                 {% endif %}
+                                {% endwith %}
+
                         <!-- форма входа -->
                         <form class="space-y-5" id="loginForm" action="{{ url_for('login') }}" method="POST">
                             <!-- email / логин -->

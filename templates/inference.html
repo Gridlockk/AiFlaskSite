@@ -214,7 +214,7 @@
         .spinner-text { color: #b0b9d4; font-size: 0.88rem; }
     </style>
 </head>
-<body>
+<body data-project-id="{{ project.id }}">
 <div class="app">
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
@@ -228,8 +228,12 @@
             <a href="{{ url_for('project_users_list', project_id=project.id) }}" class="nav-item">
                 <i class="fas fa-users"></i><span>Участники</span>
             </a>
-            <a href="{{ url_for('project_inference', project_id=project.id) }}" class="nav-item active">
+            <a  class="nav-item active">
                 <i class="fas fas fas fa-microchip"></i><span>Проверка модели</span>
+            </a>
+            <a href="{{ url_for('ai_trainer', project_id=project.id) }}" class="nav-item">
+                <i class="fas fa-brain"></i>
+                <span>AI Trainer</span>
             </a>
             <a href="{{ url_for('project_media', project_id=project.id) }}" class="nav-item">
                 <i class="fas fa-photo-video"></i><span>Медиа</span>
@@ -279,6 +283,13 @@
                             <i class="fas fa-brain" style="color:#6b84b4;font-size:1rem;flex-shrink:0;"></i>
                             <span style="font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">{{ m.name }}</span>
                             <span style="font-size:0.65rem;padding:2px 5px;border-radius:6px;background:#e0e7ff;color:#3730a3;flex-shrink:0;">{{ m.format }}</span>
+                            <button onclick="event.stopPropagation(); deleteModel({{ m.id }})"
+                           style="background:none;border:none;cursor:pointer;padding:2px 4px;flex-shrink:0;color:#9ca3af;border-radius:4px;transition:color 0.2s;"
+                             onmouseover="this.style.color='#ef4444'"
+                             onmouseout="this.style.color='#9ca3af'"
+                             title="Удалить модель">
+                            <i class="fas fa-trash-alt" style="font-size:0.75rem;"></i>
+                            </button>
                         </div>
                         {% endfor %}
                     </div>
@@ -309,7 +320,11 @@
                     <div class="panel-title"><i class="fas fa-image"></i> Источник</div>
                     <div class="source-tabs">
                         <div class="source-tab active" id="tabUpload" onclick="switchSource('upload')"><i class="fas fa-upload"></i> Файл</div>
+
+                         <!--DataSet Button old
+                        <!--
                         <div class="source-tab" id="tabDataset" onclick="switchSource('dataset')"><i class="fas fa-database"></i> Датасет</div>
+                        -->
                     </div>
 
                     <div id="sourceUpload">
@@ -335,6 +350,18 @@
                             <div style="color:#94a3b8;font-size:0.8rem;text-align:center;padding:16px 0;">Нет изображений</div>
                             {% endif %}
                         </div>
+
+                        <div style="display:flex;gap:6px;margin-top:8px;">
+        <button class="btn" id="btnPrev" onclick="navigateDataset(-1)"
+            style="background:#2d4059;color:white;flex:1;padding:7px;">
+            <i class="fas fa-chevron-left"></i> Пред.
+        </button>
+        <span id="dsCounter" style="align-self:center;font-size:0.75rem;color:#5f6c84;white-space:nowrap;min-width:50px;text-align:center;">0 / 0</span>
+        <button class="btn" id="btnNext" onclick="navigateDataset(1)"
+            style="background:#2d4059;color:white;flex:1;padding:7px;">
+            След. <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
                         <button class="btn btn-green" id="btnRunAll" onclick="runOnDataset()" style="margin-top:8px;" disabled>
                             <i class="fas fa-play-circle"></i> Запустить на всём датасете
                         </button>
@@ -378,9 +405,15 @@
             <div class="canvas-zone">
                 <div class="canvas-topbar">
                     <span class="canvas-topbar-title" id="canvasTitle">Изображение не выбрано</span>
+
+
+
+                     <!-- Old Button
+                    <!--
                     <button class="toggle-btn on" id="togglePred" onclick="toggleLayer('pred')">
                         <div class="toggle-dot"></div> Предсказания
                     </button>
+                    -->
                     <button class="toggle-btn on" id="toggleGt" onclick="toggleLayer('gt')">
                         <div class="toggle-dot"></div> GT аннотации
                     </button>
@@ -422,6 +455,8 @@
     let zoom = 1;
 let IMAGE_RESULTS = {};
 
+
+let currentDsIndex = -1;
 let ortSession = null;
 let modelLoaded = false;
 let currentImageData = null;
@@ -431,9 +466,25 @@ let showPred = true;
 let showGt = true;
 let batchRunning = false;
 
+function navigateDataset(dir) {
+    const next = currentDsIndex + dir;
+    if (next < 0 || next >= dsIds.length) return;
+    const id = dsIds[next];
+    loadDatasetImage(id, DATASET_IMAGES[id].filename);
+}
+
+function updateDsCounter() {
+    const total = dsIds.length;
+    const idx = currentDsIndex;
+    document.getElementById('dsCounter').textContent =
+        total > 0 ? `${idx + 1} / ${total}` : '0 / 0';
+    document.getElementById('btnPrev').disabled = idx <= 0;
+    document.getElementById('btnNext').disabled = idx >= total - 1;
+}
 
 const PROJECT_ID = {{ project.id }};
 const _imgList = {{ images_json | safe }};
+const dsIds = _imgList.map(img => img.id);
 const DATASET_IMAGES = {};
 _imgList.forEach(img => {
     img.url = `/static/uploads/${img.filename}`;
@@ -583,40 +634,61 @@ function loadImageFile(input) {
 }
 
 function loadDatasetImage(id, filename) {
+    currentDsIndex = dsIds.indexOf(id);
 
-    document.querySelectorAll('.dataset-item')
-        .forEach(el => el.classList.remove('active'));
-
+    document.querySelectorAll('.dataset-item').forEach(el => el.classList.remove('active'));
     document.getElementById('dsItem_' + id)?.classList.add('active');
+
+    const activeItem = document.getElementById('dsItem_' + id);
+    if (activeItem) activeItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
     const imgData = DATASET_IMAGES[id];
     if (!imgData) return;
 
     currentImageData = {
+        id: imgData.id,
         url: imgData.url,
         filename: imgData.filename,
         annotations: imgData.annotations || []
     };
 
-    displayImage(imgData.url, imgData.filename);
-
     document.getElementById('btnRun').disabled = !ortSession;
+    updateDsCounter();
 
-    // если результат уже есть — показываем его
     const saved = IMAGE_RESULTS[imgData.filename];
 
-    if (saved) {
+    // Загружаем изображение вручную, чтобы контролировать момент отрисовки результатов
+    const canvas = document.getElementById('inferCanvas');
+    document.getElementById('canvasTitle').textContent = imgData.filename;
+    document.getElementById('statusImage').textContent = imgData.filename;
 
-        lastDetections = saved;
+    const img = new Image();
+    img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.style.display = 'block';
+        document.getElementById('canvasPlaceholder').style.display = 'none';
+        document.getElementById('statusSize').textContent = `${img.naturalWidth}×${img.naturalHeight}`;
 
-        loadImg(imgData.url).then(img => {
+        if (saved && saved.length > 0) {
+            // Есть сохранённые результаты — рисуем с разметкой
+            lastDetections = saved;
+            hiddenDets = new Set();
+            _allHidden = false;
             redraw(img, saved, currentImageData.annotations);
             renderResults(saved, currentImageData.annotations);
-        });
-
-    }
+            document.getElementById('statusDets').textContent = saved.length;
+        } else {
+            // Нет результатов — просто показываем фото
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            lastDetections = [];
+            document.getElementById('statusDets').textContent = '—';
+            document.getElementById('statusTime').textContent = '—';
+            document.getElementById('resultsScroll').innerHTML = '<div class="no-results"><i class="fas fa-bolt" style="font-size:1.5rem;display:block;margin-bottom:6px;"></i>Нажмите «Запустить»</div>';
+        }
+    };
+    img.src = imgData.url;
 }
-
 function displayImage(url, filename) {
     const canvas = document.getElementById('inferCanvas');
 
@@ -678,8 +750,8 @@ _allHidden = false;
         const dets = postprocess(out, confThr, iouThr, sx, sy, px, py, sz, img.naturalWidth, img.naturalHeight);
         const ms = (performance.now() - t0).toFixed(0);
         lastDetections = dets;
-        if (currentImageData && currentImageData.id) {
-    IMAGE_RESULTS[currentImageData.id] = dets;
+        if (currentImageData && currentImageData.filename) {
+    IMAGE_RESULTS[currentImageData.filename] = dets;
 }
 
         redraw(img, dets, currentImageData.annotations);
@@ -710,9 +782,17 @@ async function runOnDataset() {
             const out = (await ortSession.run({ [ortSession.inputNames[0]]: tensor }))[ortSession.outputNames[0]];
             const dets = postprocess(out, confThr, iouThr, sx, sy, px, py, sz, img.naturalWidth, img.naturalHeight);
             totalDets += dets.length;
+            IMAGE_RESULTS[d.filename] = dets;
             const { tp, fp, fn } = metrics(dets, d.annotations || []);
             allTP += tp; allFP += fp; allFN += fn;
-            if (i === ids.length - 1) { currentImageData = d; redraw(img, dets, d.annotations || []); canvas.style.display='block'; document.getElementById('canvasPlaceholder').style.display='none'; document.getElementById('canvasTitle').textContent=d.filename; }
+           if (i === ids.length - 1) {
+    const canvas = document.getElementById('inferCanvas');
+    currentImageData = { id: d.id, url: d.url, filename: d.filename, annotations: d.annotations || [] };
+    redraw(img, dets, d.annotations || []);
+    canvas.style.display = 'block';
+    document.getElementById('canvasPlaceholder').style.display = 'none';
+    document.getElementById('canvasTitle').textContent = d.filename;
+}
         } catch(e) { console.error(d.filename, e); }
     }
     const pr = allTP+allFP>0?allTP/(allTP+allFP):0, rc=allTP+allFN>0?allTP/(allTP+allFN):0, f1=pr+rc>0?2*pr*rc/(pr+rc):0;
@@ -875,6 +955,31 @@ function showSpinner(t){document.getElementById('spinnerText').textContent=t;doc
 function hideSpinner(){document.getElementById('spinnerOverlay').classList.remove('show');}
 function showToast(msg,type=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type||'');setTimeout(()=>t.className='toast',4000);}
 document.getElementById('burgerToggle').addEventListener('click',()=>document.getElementById('sidebar').classList.toggle('collapsed'));
+
+function deleteModel(modelId) {
+    if (!confirm('Удалить модель с сервера? Это действие необратимо.')) return;
+
+    // project_id берём из data-атрибута, не из Jinja2
+    const projectId = document.body.dataset.projectId;
+
+    fetch(`/project/${projectId}/delete_model/${modelId}`, {
+        method: 'POST',
+    })
+    .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+    })
+    .then(data => {
+        if (data.success) {
+            const el = document.getElementById(`savedModel_${modelId}`);
+            if (el) el.remove();
+        } else {
+            alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+        }
+    })
+    .catch(err => alert('Ошибка: ' + err.message));
+}
+
 </script>
 </body>
 </html>

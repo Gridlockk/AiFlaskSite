@@ -342,7 +342,7 @@
         <div class="top-bar">
             <div class="page-title">
                 <h2><i class="fas fa-microchip"></i> Автоматическое обучение</h2>
-                <div class="badge">Admin · Управление обучением моделей</div>
+                <div class="badge">Управление обучением моделей</div>
             </div>
             <div class="user-info">
                 <span><i class="fas fa-user-shield"></i> <b>{{ current_user.username }}</b></span>
@@ -359,10 +359,7 @@
                         <div style="font-size:0.75rem; color:#5f6c84;" id="serverLoadText">загрузка: --%</div>
                     </div>
                 </div>
-                <div class="resource-meter">
-                    <div class="resource-label"><i class="fas fa-microchip"></i> Вычислительная нагрузка</div>
-                    <div class="progress-bar-bg"><div class="progress-fill" id="cpuFill" style="width:0%"></div></div>
-                </div>
+
                 <div class="resource-meter">
                     <div class="resource-label"><i class="fas fa-hourglass-half"></i> Активные задачи</div>
                     <div style="font-size:1.3rem; font-weight:700;" id="activeJobsCount">0</div>
@@ -423,7 +420,7 @@
 
             <div class="card">
                 <div class="card-header">
-                    <h3><i class="fas fa-history"></i> Ранее обученные модели</h3>
+                    <h3><i class="fas fa-history"></i> История обучения</h3>
                     <button class="btn btn-outline" id="refreshModelsBtn" style="padding:6px 12px;"><i class="fas fa-sync-alt"></i> Обновить</button>
                 </div>
                 <div id="modelsHistory">
@@ -549,14 +546,14 @@
                 led.className = 'status-led';
                 document.getElementById('serverStateText').innerText = 'Trainer-сервис офлайн';
                 document.getElementById('serverLoadText').innerHTML   = 'Запустите trainer.py';
-                document.getElementById('cpuFill').style.width        = '0%';
+                //document.getElementById('cpuFill').style.width        = '0%';
                 document.getElementById('activeJobsCount').innerText  = '—';
             } else {
                 const srv = data.server;
                 led.className = `status-led ${srv.status === 'busy' ? 'busy' : 'online'}`;
                 document.getElementById('serverStateText').innerText = srv.status === 'busy' ? 'Выполняется обучение' : 'Сервер готов';
                 document.getElementById('serverLoadText').innerHTML   = `ЦП: ${srv.cpu_load}% | RAM: ${srv.ram_usage}%`;
-                document.getElementById('cpuFill').style.width        = srv.cpu_load + '%';
+                //document.getElementById('cpuFill').style.width        = srv.cpu_load + '%';
                 document.getElementById('activeJobsCount').innerText  = srv.active_jobs;
             }
 

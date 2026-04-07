@@ -12,8 +12,14 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MODELS_FOLDER'] = 'static/models'
+
+app.config['PROJECTS_FOLDER'] = 'static/projects'
+
+#app.config['UPLOAD_FOLDER'] = 'static/uploads'
+#app.config['MODELS_FOLDER'] = 'static/models'
+
+
+
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -33,6 +39,20 @@ user_project = db.Table('user_project',
     db.Column('role', db.String(20), default=Role.ANNOTATOR)
 )
 
+def get_project_paths(project_id):
+    base = os.path.join(app.config['PROJECTS_FOLDER'], str(project_id))
+
+    paths = {
+        "base": base,
+        "uploads": os.path.join(base, "uploads"),
+        "models": os.path.join(base, "models"),
+        "datasets": os.path.join(base, "datasets")
+    }
+
+    for p in paths.values():
+        os.makedirs(p, exist_ok=True)
+
+    return paths
 
 class Model(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -141,8 +161,9 @@ def upload_model(project_id):
     original_name = secure_filename(file.filename)
     filename = f"{uuid.uuid4().hex}_{original_name}"
 
-    os.makedirs(app.config['MODELS_FOLDER'], exist_ok=True)
-    filepath = os.path.join(app.config['MODELS_FOLDER'], filename)
+    paths = get_project_paths(project_id)
+
+    filepath = os.path.join(paths["models"], filename)
     file.save(filepath)
 
     # Сохраняем в БД
@@ -171,7 +192,6 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    team = db.Column(db.String(100), default="Моя команда")
     projects = db.relationship('Project', secondary=user_project, back_populates='users')
     annotations = db.relationship('Annotation', backref='creator', lazy=True)
 
@@ -193,7 +213,9 @@ def delete_model(project_id, model_id):
     if not model:
         return jsonify({"success": False, "error": f"Модель {model_id} не найдена в проекте {project_id}"})
 
-    filepath = os.path.join(app.config['MODELS_FOLDER'], model.filename)
+    paths = get_project_paths(project_id)
+
+    filepath = os.path.join(paths["models"], model.filename)
     if os.path.exists(filepath):
         os.remove(filepath)
 
@@ -610,7 +632,9 @@ def export_annotations(project_id):
         # ── Фотографии (опционально) ──
         if include_images:
             for img in images:
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
+                paths = get_project_paths(project_id)
+
+                filepath = os.path.join(paths["uploads"], img.filename)
                 if os.path.exists(filepath):
                     zf.write(filepath, f"images/{img.filename}")
 
@@ -690,7 +714,8 @@ def export_annotations(project_id):
                 # Нужны реальные размеры изображения для нормализации
                 try:
                     from PIL import Image as PILImage
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], img.filename)
+                    paths = get_project_paths(project_id)
+                    filepath = os.path.join(paths["uploads"], img.filename)
                     with PILImage.open(filepath) as pil_img:
                         img_w, img_h = pil_img.size
                 except Exception:
@@ -825,6 +850,7 @@ def project_media(project_id):
 @app.route('/project/<int:project_id>/upload_image', methods=['POST'])
 @login_required
 def upload_image(project_id):
+
     project = Project.query.get_or_404(project_id)
 
     role = get_user_role(current_user, project)
@@ -832,33 +858,52 @@ def upload_image(project_id):
         flash("Только администратор может загружать изображения", "danger")
         return redirect(url_for('project_media', project_id=project_id))
 
-    file = request.files.get('image')
-    if not file or file.filename == '':
-        flash("Файл не выбран", "danger")
+    files = request.files.getlist('images')
+
+    if not files:
+        flash("Файлы не выбраны", "danger")
         return redirect(url_for('project_media', project_id=project_id))
 
-    # Безопасное имя файла
     from werkzeug.utils import secure_filename
     import uuid
-    ext = os.path.splitext(file.filename)[1].lower()
+
     allowed = {'.jpg', '.jpeg', '.png', '.webp', '.bmp'}
-    if ext not in allowed:
-        flash("Неподдерживаемый формат файла", "danger")
-        return redirect(url_for('project_media', project_id=project_id))
 
-    filename = secure_filename(file.filename)
-    # Добавляем uuid чтобы избежать коллизий имён
-    filename = f"{uuid.uuid4().hex}_{filename}"
+    paths = get_project_paths(project_id)
+    upload_path = paths["uploads"]
+    os.makedirs(upload_path, exist_ok=True)
 
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
+    uploaded_count = 0
 
-    img = Image(filename=filename, project_id=project_id)
-    db.session.add(img)
+    for file in files:
+
+        if file.filename == '':
+            continue
+
+        ext = os.path.splitext(file.filename)[1].lower()
+
+        if ext not in allowed:
+            continue
+
+        filename = secure_filename(file.filename)
+        filename = f"{uuid.uuid4().hex}_{filename}"
+
+        filepath = os.path.join(upload_path, filename)
+
+        file.save(filepath)
+
+        img = Image(
+            filename=filename,
+            project_id=project_id
+        )
+
+        db.session.add(img)
+        uploaded_count += 1
+
     db.session.commit()
 
-    flash("Изображение загружено", "success")
+    flash(f"Загружено {uploaded_count} изображений", "success")
+
     return redirect(url_for('project_media', project_id=project_id))
 
 
@@ -877,7 +922,8 @@ def delete_image(image_id):
     Annotation.query.filter_by(image_id=image_id).delete()
 
     # Удаляем файл с диска
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+    paths = get_project_paths(project_id)
+    filepath = os.path.join(paths["uploads"], image.filename)
     if os.path.exists(filepath):
         os.remove(filepath)
 

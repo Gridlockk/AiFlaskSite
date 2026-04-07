@@ -387,7 +387,7 @@
 <script>
 // ── Данные с сервера ──
 const IMAGE_ID = {{ image.id }};
-const IMAGE_URL = "{{ url_for('static', filename='uploads/' + image.filename) }}";
+const IMAGE_URL = "/static/projects/{{ image.project_id }}/uploads/{{ image.filename }}";
 const EXISTING_ANNOTATIONS = {{ annotations_json | safe }};
 
 // ── Цвета для меток ──
@@ -819,7 +819,7 @@ async function getSession(modelId, filename) {
     if (ortSession && loadedModelId === modelId) return ortSession;
     showToast('Загрузка модели…');
     document.getElementById('statusMsg').textContent = 'Загрузка ONNX-модели…';
-    const modelUrl = `/static/models/${filename}`;
+    const modelUrl = `/static/projects/${PROJECT_ID}/models/${filename}`;
     ortSession = await ort.InferenceSession.create(modelUrl, { executionProviders: ['wasm'] });
     loadedModelId = modelId;
     return ortSession;

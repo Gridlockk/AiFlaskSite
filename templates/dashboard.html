@@ -715,7 +715,7 @@
                         {% for media in recent_media %}
                         <div class="media-thumbnail" onclick="previewMedia('{{ media.filename }}', {{ media.annotations_count }})">
                             {% if media.file_type == 'image' %}
-                                <img src="{{ url_for('static', filename='uploads/' + media.filename) }}" alt="{{ media.filename }}">
+                                <img src="/static/projects/{{ project.id }}/uploads/{{ media.filename }}" alt="{{ media.filename }}">
                             {% else %}
                                 <i class="fas fa-video"></i>
                             {% endif %}

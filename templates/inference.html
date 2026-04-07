@@ -339,7 +339,7 @@
                             {% for img in images %}
                             <div class="dataset-item" id="dsItem_{{ img['id'] }}"
                                 onclick="loadDatasetImage('{{ img['id'] }}', '{{ img['filename'] }}')">
-                                <img src="{{ url_for('static', filename='uploads/' + img['filename']) }}" onerror="this.style.display='none'">
+                                <img src="/static/projects/{{ project.id }}/uploads/{{ img['filename'] }}" onerror="this.style.display='none'">
                                 <span class="dataset-item-name">{{ img['filename'] }}</span>
                                 {% if img['annotations']|length > 0 %}
                                 <span class="dataset-item-badge">{{ img['annotations']|length }}</span>
@@ -487,7 +487,7 @@ const _imgList = {{ images_json | safe }};
 const dsIds = _imgList.map(img => img.id);
 const DATASET_IMAGES = {};
 _imgList.forEach(img => {
-    img.url = `/static/uploads/${img.filename}`;
+    img.url = `/static/projects/${PROJECT_ID}/uploads/${img.filename}`;
     DATASET_IMAGES[img.id] = img;
 });
 
@@ -580,7 +580,7 @@ async function loadSavedModel(filename, name, modelId) {
     setModelStatus('loading', name, 'Загрузка...');
     showSpinner('Загрузка модели...');
     try {
-        const res = await fetch(`/static/models/${filename}`);
+        const res = await fetch(`/static/projects/${PROJECT_ID}/models/${filename}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buf = await res.arrayBuffer();
         document.getElementById('spinnerText').textContent = 'Инициализация ONNX...';

@@ -1,13 +1,4 @@
-"""
-trainer.py — Отдельный сервис обучения YOLOv8.
-Запуск: python trainer.py  (порт 5001)
 
-Взаимодействует с основным приложением (app.py, порт 5000) через HTTP:
-  - принимает POST /train           — запуск задачи обучения
-  - отдаёт  GET  /job_status/<id>   — текущий статус задачи
-  - отдаёт  GET  /jobs              — список всех задач
-  - шлёт    POST callback в app.py  — при завершении/ошибке
-"""
 
 from flask import Flask, request, jsonify
 import threading
@@ -25,8 +16,9 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # ── Настройки путей (должны совпадать с app.py) ──────────────────────────────
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "static", "uploads")
-MODELS_FOLDER = os.path.join(os.path.dirname(__file__), "static", "models")
+# ИСПРАВЛЕНО: теперь проекты хранятся в static/projects/
+PROJECTS_FOLDER = os.path.join(os.path.dirname(__file__), "static", "projects")
+MODELS_FOLDER = os.path.join(os.path.dirname(__file__), "static", "projects")  # модели внутри проектов
 DATASETS_FOLDER = os.path.join(os.path.dirname(__file__), "static", "datasets")
 
 # URL обратного вызова в основное приложение
@@ -65,21 +57,8 @@ def send_callback(job_id: str):
         log.warning(f"Callback failed for job {job_id}: {e}")
 
 
-def build_yolo_dataset(images_info: list[dict], job_id: str) -> str:
-    """
-    Подготовить датасет в формате YOLO из переданных изображений.
+def build_yolo_dataset(images_info: list[dict], job_id: str, project_id: int) -> str:
 
-    images_info — список словарей:
-        {
-            "filename": "abc123.jpg",          # имя файла в static/uploads
-            "annotations": [
-                {"x": 10, "y": 20, "width": 50, "height": 60, "label": "cat"},
-                ...
-            ]
-        }
-
-    Возвращает путь к dataset.yaml.
-    """
     from PIL import Image as PILImage
 
     dataset_dir = os.path.join(DATASETS_FOLDER, job_id)
@@ -87,6 +66,9 @@ def build_yolo_dataset(images_info: list[dict], job_id: str) -> str:
     train_labels = os.path.join(dataset_dir, "labels", "train")
     os.makedirs(train_images, exist_ok=True)
     os.makedirs(train_labels, exist_ok=True)
+
+    # ИСПРАВЛЕНО: путь к исходным изображениям в папке проекта
+    source_images_dir = os.path.join(PROJECTS_FOLDER, str(project_id), "uploads")
 
     # Собираем уникальные классы
     all_labels = sorted(set(
@@ -97,9 +79,11 @@ def build_yolo_dataset(images_info: list[dict], job_id: str) -> str:
     ))
     label_to_id = {l: i for i, l in enumerate(all_labels)}
 
+    successful = 0
     skipped = 0
+
     for img_info in images_info:
-        src = os.path.join(UPLOAD_FOLDER, img_info["filename"])
+        src = os.path.join(source_images_dir, img_info["filename"])
         if not os.path.exists(src):
             log.warning(f"Image not found: {src}")
             skipped += 1
@@ -109,6 +93,7 @@ def build_yolo_dataset(images_info: list[dict], job_id: str) -> str:
         import shutil
         dst = os.path.join(train_images, img_info["filename"])
         shutil.copy2(src, dst)
+        successful += 1
 
         annotations = img_info.get("annotations", [])
         if not annotations:
@@ -164,23 +149,18 @@ def build_yolo_dataset(images_info: list[dict], job_id: str) -> str:
 
         log.info(f"  {img_info['filename']}: {written} annotations, img_size={img_w}x{img_h}, pixels={coords_are_pixels}")
 
-    log.info(f"Dataset built: {len(images_info) - skipped} images, {len(all_labels)} classes, skipped {skipped}")
+    log.info(f"Dataset built: {successful} images, {len(all_labels)} classes, skipped {skipped}")
 
     # Пишем dataset.yaml — names должны быть в YAML-формате, не Python repr
-    # НЕПРАВИЛЬНО: names: ['cat', 'dog']   ← ultralytics не распознаёт
-    # ПРАВИЛЬНО:   names:
-    #                - cat
-    #                - dog
     yaml_path = os.path.join(dataset_dir, "dataset.yaml")
     names_yaml_block = "\n".join(f"  - {lbl}" for lbl in all_labels)
     with open(yaml_path, "w") as f:
-        f.write(f"path: {os.path.abspath(dataset_dir)}\n")  # абсолютный путь — важно!
+        f.write(f"path: {os.path.abspath(dataset_dir)}\n")
         f.write("train: images/train\n")
-        f.write("val: images/train\n")   # при малом датасете val = train
+        f.write("val: images/train\n")
         f.write(f"nc: {len(all_labels)}\n")
         f.write(f"names:\n{names_yaml_block}\n")
 
-    # Верификация — выводим yaml в лог чтобы можно было проверить
     with open(yaml_path) as yf:
         log.info(f"dataset.yaml:\n{yf.read()}")
 
@@ -196,17 +176,18 @@ def run_training(job_id: str, payload: dict):
     update_job(job_id, status="preparing", progress=5)
 
     try:
+        project_id = payload.get("project_id")
         images_info = payload.get("images", [])
         epochs      = int(payload.get("epochs", 10))
         imgsz       = int(payload.get("imgsz", 640))
-        model_base  = payload.get("model", "yolov8n.pt")   # yolov8n / yolov8s / ...
+        model_base  = payload.get("model", "yolov8n.pt")
 
         if not images_info:
             raise ValueError("Нет изображений для обучения")
 
         # ── 1. Подготовка датасета ──────────────────────────────────────
         update_job(job_id, status="preparing", progress=10, message="Подготовка датасета...")
-        yaml_path = build_yolo_dataset(images_info, job_id)
+        yaml_path = build_yolo_dataset(images_info, job_id, project_id)
 
         # ── 2. Импорт ultralytics (YOLO) ────────────────────────────────
         update_job(job_id, status="training", progress=20, message="Загрузка модели...")
@@ -222,14 +203,14 @@ def run_training(job_id: str, payload: dict):
 
         # ── 3. Обучение с колбэком прогресса ────────────────────────────
         update_job(job_id, status="training", progress=25, message="Обучение...")
-        os.makedirs(MODELS_FOLDER, exist_ok=True)
+
+        # ИСПРАВЛЕНО: модели сохраняются в папку проекта
+        project_models_folder = os.path.join(PROJECTS_FOLDER, str(project_id), "models")
+        os.makedirs(project_models_folder, exist_ok=True)
 
         project_dir = os.path.join(DATASETS_FOLDER, job_id, "runs")
-        # Минимум 50 эпох для нормального обучения на малом датасете.
-        # patience=20 — ранняя остановка если нет улучшений.
-        # conf=0.001 — низкий порог при обучении (высокий только при инференсе).
-        # augment=True — аугментация критически важна при малом датасете.
         effective_epochs = max(epochs, 50)
+
         results = model.train(
             data=yaml_path,
             epochs=effective_epochs,
@@ -237,34 +218,30 @@ def run_training(job_id: str, payload: dict):
             project=project_dir,
             name="train",
             exist_ok=True,
-            verbose=True,       # True чтобы видеть прогресс в логах
-            patience=20,        # ранняя остановка
-            batch=-1,           # авто-подбор batch size под GPU/CPU
-            cache=False,        # не кэшировать если мало RAM
-            augment=True,       # аугментация — важна при малом датасете
-            cos_lr=True,        # косинусный lr schedule
+            verbose=True,
+            patience=20,
+            batch=-1,
+            cache=False,
+            augment=True,
+            cos_lr=True,
             warmup_epochs=3,
         )
 
-        # ── 4. Копирование лучшей модели в shared folder ────────────────
+        # ── 4. Копирование лучшей модели в папку проекта ─────────────────
         update_job(job_id, status="exporting", progress=90, message="Экспорт модели...")
 
         best_pt = os.path.join(project_dir, "train", "weights", "best.pt")
         if not os.path.exists(best_pt):
-            # Fallback: last.pt
             best_pt = os.path.join(project_dir, "train", "weights", "last.pt")
 
         if not os.path.exists(best_pt):
             raise FileNotFoundError("Файл весов не найден после обучения")
 
-        # Конвертируем в ONNX для совместимости с inference в app.py
+        # Конвертируем в ONNX
         onnx_name = f"trained_{job_id[:8]}.onnx"
-        onnx_path = os.path.join(MODELS_FOLDER, onnx_name)
+        onnx_path = os.path.join(project_models_folder, onnx_name)
 
         trained_model = YOLO(best_pt)
-        # opset=12 — стабильная версия для onnxruntime
-        # simplify=True — убирает лишние операции из графа
-        # dynamic=False — фиксированный batch, нужен для корректного инференса
         trained_model.export(
             format="onnx",
             imgsz=imgsz,
@@ -273,15 +250,13 @@ def run_training(job_id: str, payload: dict):
             dynamic=False,
         )
 
-        # ultralytics сохраняет рядом с best.pt
         exported_onnx = best_pt.replace(".pt", ".onnx")
         if os.path.exists(exported_onnx):
             import shutil
             shutil.move(exported_onnx, onnx_path)
         else:
-            # Если ONNX не создался — сохраняем .pt
             onnx_name = f"trained_{job_id[:8]}.pt"
-            onnx_path = os.path.join(MODELS_FOLDER, onnx_name)
+            onnx_path = os.path.join(project_models_folder, onnx_name)
             import shutil
             shutil.copy2(best_pt, onnx_path)
 
@@ -346,11 +321,12 @@ def start_training():
         return jsonify({"success": False, "error": "Пустой запрос"}), 400
 
     job_id = uuid.uuid4().hex
+    project_id = data.get("project_id")
 
     with jobs_lock:
         jobs[job_id] = {
             "job_id": job_id,
-            "project_id": data.get("project_id"),
+            "project_id": project_id,
             "status": "queued",
             "progress": 0,
             "message": "В очереди",
@@ -360,7 +336,6 @@ def start_training():
             "updated_at": datetime.now().isoformat(),
         }
 
-    # Запускаем в отдельном потоке, чтобы не блокировать HTTP
     t = threading.Thread(target=run_training, args=(job_id, data), daemon=True)
     t.start()
 
@@ -414,7 +389,6 @@ def health():
     })
 
 
-
 @app.route("/debug_dataset/<job_id>", methods=["GET"])
 def debug_dataset(job_id):
     """
@@ -436,7 +410,7 @@ def debug_dataset(job_id):
             result["yaml"] = f.read()
 
     if os.path.exists(labels_dir):
-        for fname in os.listdir(labels_dir)[:5]:   # первые 5
+        for fname in os.listdir(labels_dir)[:5]:
             fpath = os.path.join(labels_dir, fname)
             with open(fpath) as f:
                 lines = f.readlines()
@@ -458,8 +432,8 @@ def debug_dataset(job_id):
 
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    os.makedirs(MODELS_FOLDER, exist_ok=True)
+    # Создаём необходимые папки
+    os.makedirs(PROJECTS_FOLDER, exist_ok=True)
     os.makedirs(DATASETS_FOLDER, exist_ok=True)
 
     log.info("Trainer service starting on port 5001...")

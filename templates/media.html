@@ -366,7 +366,7 @@
                     <label class="file-input-label" for="fileInput">
                         <i class="fas fa-folder-open"></i> Выбрать файл
                     </label>
-                    <input type="file" id="fileInput" name="image" accept="image/*" onchange="updateFileName(this)">
+                    <input type="file" id="fileInput" name="images" accept="image/*" onchange="updateFileName(this)" multiple>
                     <span class="file-name" id="fileName">Файл не выбран</span>
                     <button type="submit" class="upload-btn">
                         <i class="fas fa-upload"></i> Загрузить
@@ -433,7 +433,7 @@
                             {% endif %}
 
                             <img class="img-thumb"
-                                src="{{ url_for('static', filename='uploads/' + image.filename) }}"
+                                src="/static/projects/{{ project.id }}/uploads/{{ image.filename }}"
                                 alt="{{ image.filename }}"
                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                             <div class="img-thumb-placeholder" style="display:none;">
